@@ -1,18 +1,21 @@
 #include "window/MainWindow.h"
 #include "webview/WebViewManager.h"
 
+#include <windowsx.h>   // GET_X_LPARAM / GET_Y_LPARAM
+
 namespace {
 constexpr wchar_t kClassName[] = L"WhatsAppPrivacyWindow";
 constexpr wchar_t kTitle[]     = L"WhatsApp Privacy";
 constexpr int     kHotkeyId    = 1;   // Ctrl+Shift+P
 constexpr UINT_PTR kSelfCheckTimeoutId = 2;
 
-constexpr int kToolbarHeight = 40;
 
 // Control ids.
-constexpr int kIdMaster = 100;
-constexpr int kIdFirstCategory = 101;   // 101..104 in kCategories order
-constexpr int kIdHover = 110;
+// System-menu command ids. Windows reserves >= 0xF000 for SC_* and masks the low
+// 4 bits of wParam in WM_SYSCOMMAND, so these must be below 0xF000 and 16-aligned.
+constexpr int kIdMaster        = 0x0010;
+constexpr int kIdFirstCategory = 0x0020;   // 0x20,0x30,0x40,0x50
+constexpr int kIdHover         = 0x0060;
 
 struct Category { const char* key; const wchar_t* label; };
 constexpr Category kCategories[4] = {
@@ -25,104 +28,50 @@ constexpr Category kCategories[4] = {
 
 MainWindow::MainWindow() = default;
 
-MainWindow::~MainWindow() {
-    if (font_) DeleteObject(font_);
-}
+MainWindow::~MainWindow() = default;
 
+// No toolbar and no checkboxes: the WebView owns the whole client area, and the
+// privacy options live in the window menu (right-click the title bar, or press
+// Alt+Space). Custom-painted caption buttons are not viable here -- Windows 11
+// composites the frame through DWM and paints over anything drawn via
+// GetWindowDC.
 void MainWindow::CreateToolbar() {
-    const HINSTANCE inst = GetModuleHandleW(nullptr);
+    HMENU sys = GetSystemMenu(hwnd_, FALSE);
+    if (!sys) return;
 
-    toolbar_ = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_LEFT,
-                               0, 0, 0, kToolbarHeight, hwnd_, nullptr, inst, nullptr);
-
-    // Match the shell UI font instead of the 1990s system default.
-    NONCLIENTMETRICSW ncm{ sizeof(ncm) };
-    if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0))
-        font_ = CreateFontIndirectW(&ncm.lfMessageFont);
-
-    auto styleChild = [&](HWND h) {
-        if (font_) SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
-    };
-
-    master_ = CreateWindowExW(0, L"BUTTON", L"Privacy Mode",
-        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-        0, 0, 0, 0, toolbar_, reinterpret_cast<HMENU>(kIdMaster), inst, nullptr);
-    styleChild(master_);
-
-    for (int i = 0; i < 4; ++i) {
-        checks_[i] = CreateWindowExW(0, L"BUTTON", kCategories[i].label,
-            WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-            0, 0, 0, 0, toolbar_,
-            reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdFirstCategory + i)),
-            inst, nullptr);
-        styleChild(checks_[i]);
-    }
-
-    hover_ = CreateWindowExW(0, L"BUTTON", L"Hover to reveal",
-        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-        0, 0, 0, 0, toolbar_, reinterpret_cast<HMENU>(kIdHover), inst, nullptr);
-    styleChild(hover_);
-
-    SyncToolbar();
-}
-
-void MainWindow::LayoutChildren() {
-    RECT rc{};
-    GetClientRect(hwnd_, &rc);
-
-    if (toolbar_)
-        SetWindowPos(toolbar_, nullptr, 0, 0, rc.right, kToolbarHeight,
-                     SWP_NOZORDER);
-
-    // Lay the checkboxes out left-to-right, sized to their text.
-    int x = 10;
-    const int y = (kToolbarHeight - 22) / 2;
-    HDC dc = GetDC(toolbar_);
-    HGDIOBJ old = font_ ? SelectObject(dc, font_) : nullptr;
-
-    auto place = [&](HWND h, const wchar_t* text, int pad) {
-        SIZE sz{};
-        GetTextExtentPoint32W(dc, text, lstrlenW(text), &sz);
-        const int w = sz.cx + pad;
-        SetWindowPos(h, nullptr, x, y, w, 22, SWP_NOZORDER);
-        x += w + 12;
-    };
-
-    if (master_) place(master_, L"Privacy Mode", 28);
-    x += 8;   // visual gap between master and the per-category group
+    AppendMenuW(sys, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(sys, MF_STRING, kIdMaster, L"Privacy Mode\tCtrl+Shift+P");
     for (int i = 0; i < 4; ++i)
-        if (checks_[i]) place(checks_[i], kCategories[i].label, 26);
-    x += 8;
-    if (hover_) place(hover_, L"Hover to reveal", 26);
+        AppendMenuW(sys, MF_STRING, kIdFirstCategory + i * 16, kCategories[i].label);
+    AppendMenuW(sys, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(sys, MF_STRING, kIdHover, L"Hover to reveal");
 
-    if (old) SelectObject(dc, old);
-    ReleaseDC(toolbar_, dc);
-
-    if (webview_) webview_->Resize();
+    SyncSystemMenu();
 }
 
-// Pushes PrivacyManager state into the checkboxes. Categories are disabled while
-// the master toggle is off, since it gates them anyway.
-void MainWindow::SyncToolbar() {
-    if (!master_) return;
-    syncing_ = true;
+// Check marks are set on demand (WM_INITMENUPOPUP) so they always match state.
+void MainWindow::SyncSystemMenu() {
+    HMENU sys = GetSystemMenu(hwnd_, FALSE);
+    if (!sys) return;
 
     const auto& s = privacy_.Get();
-    SendMessageW(master_, BM_SETCHECK, s.on ? BST_CHECKED : BST_UNCHECKED, 0);
+    CheckMenuItem(sys, kIdMaster, MF_BYCOMMAND | (s.on ? MF_CHECKED : MF_UNCHECKED));
 
     const bool flags[4] = { s.names, s.messages, s.pictures, s.previews };
     for (int i = 0; i < 4; ++i) {
-        if (!checks_[i]) continue;
-        SendMessageW(checks_[i], BM_SETCHECK, flags[i] ? BST_CHECKED : BST_UNCHECKED, 0);
-        EnableWindow(checks_[i], s.on);
+        CheckMenuItem(sys, kIdFirstCategory + i * 16,
+                      MF_BYCOMMAND | (flags[i] ? MF_CHECKED : MF_UNCHECKED));
+        // Categories are gated by the master toggle anyway.
+        EnableMenuItem(sys, kIdFirstCategory + i * 16,
+                       MF_BYCOMMAND | (s.on ? MF_ENABLED : MF_GRAYED));
     }
+    CheckMenuItem(sys, kIdHover,
+                  MF_BYCOMMAND | (s.hoverReveal ? MF_CHECKED : MF_UNCHECKED));
+    EnableMenuItem(sys, kIdHover, MF_BYCOMMAND | (s.on ? MF_ENABLED : MF_GRAYED));
+}
 
-    if (hover_) {
-        SendMessageW(hover_, BM_SETCHECK, s.hoverReveal ? BST_CHECKED : BST_UNCHECKED, 0);
-        EnableWindow(hover_, s.on);   // nothing to reveal when privacy is off
-    }
-
-    syncing_ = false;
+void MainWindow::LayoutChildren() {
+    if (webview_) webview_->Resize();
 }
 
 // Writes the JS self-check output to selfcheck.txt beside the exe and quits with
@@ -221,7 +170,8 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
         if (!selfCheck_) CreateToolbar();
         webview_ = std::make_unique<WebViewManager>(hwnd_, &privacy_);
         webview_->SetSelfCheck(selfCheck_);
-        webview_->SetTopInset(selfCheck_ ? 0 : kToolbarHeight);
+        // No toolbar any more: the WebView owns the entire client area.
+        webview_->SetTopInset(0);
         if (selfCheck_) {
             webview_->SetMessageHandler([this](const std::wstring& json) {
                 selfCheckLog_ += json + L"\r\n";
@@ -237,31 +187,29 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
         RegisterHotKey(hwnd_, kHotkeyId, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, 'P');
         return 0;
 
-    case WM_COMMAND: {
-        if (syncing_ || HIWORD(wp) != BN_CLICKED) return 0;
-        const int id = LOWORD(wp);
-        const HWND ctrl = reinterpret_cast<HWND>(lp);
-        const bool checked = SendMessageW(ctrl, BM_GETCHECK, 0, 0) == BST_CHECKED;
-
-        if (id == kIdMaster) {
-            auto s = privacy_.Get();
-            s.on = checked;
-            privacy_.Set(s);
-        } else if (id >= kIdFirstCategory && id < kIdFirstCategory + 4) {
-            privacy_.SetCategory(kCategories[id - kIdFirstCategory].key, checked);
-        } else if (id == kIdHover) {
-            privacy_.SetCategory("hoverReveal", checked);
-        } else {
-            return 0;
+    // Right-click on the title bar (and Alt+Space) opens the window menu; the
+    // privacy items are appended to it in CreateToolbar(). Custom-painted
+    // caption buttons do not survive DWM composition on Windows 11, so the
+    // system menu is the reliable place for this.
+    case WM_SYSCOMMAND:
+        if (wp == kIdMaster) { privacy_.Toggle(); return 0; }
+        for (int i = 0; i < 4; ++i) {
+            if (wp == static_cast<WPARAM>(kIdFirstCategory + i * 16)) {
+                privacy_.ToggleCategory(kCategories[i].key);
+                return 0;
+            }
         }
-        SyncToolbar();   // keeps the category enable/disable state consistent
-        return 0;
-    }
+        if (wp == kIdHover) { privacy_.ToggleCategory("hoverReveal"); return 0; }
+        break;
+
+    case WM_INITMENUPOPUP:
+        SyncSystemMenu();   // refresh check marks before the menu is shown
+        break;              // must still reach DefWindowProc
 
     case WM_HOTKEY:
         if (wp == kHotkeyId) {
             privacy_.Toggle();   // sink pushes it to the page
-            SyncToolbar();       // hotkey and UI share one source of truth
+            SyncSystemMenu();    // hotkey and menu share one source of truth
         }
         return 0;
 

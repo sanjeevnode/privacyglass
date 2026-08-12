@@ -20,18 +20,12 @@ private:
     static LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
     LRESULT HandleMessage(UINT msg, WPARAM wp, LPARAM lp);
     void    ReportSelfCheck(const std::wstring& json);
-    void    CreateToolbar();
+    void    CreateToolbar();        // appends privacy items to the window menu
+    void    SyncSystemMenu();       // refresh those items' check marks
     void    LayoutChildren();
-    void    SyncToolbar();          // reflect PrivacyManager state in the checkboxes
 
     HWND hwnd_ = nullptr;
-    HWND toolbar_ = nullptr;
-    HWND master_ = nullptr;
-    HWND checks_[4]{};              // names, messages, pictures, previews
-    HWND hover_ = nullptr;
-    HFONT font_ = nullptr;
     bool selfCheck_ = false;
-    bool syncing_ = false;          // guards against feedback while setting checks
     std::wstring selfCheckLog_;
     PrivacyManager privacy_;
     std::unique_ptr<WebViewManager> webview_;

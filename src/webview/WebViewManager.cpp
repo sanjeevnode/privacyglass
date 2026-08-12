@@ -2,6 +2,8 @@
 #include "privacy/PrivacyManager.h"
 #include "WebAssets.h"          // generated: kWebAsset_selectorsJs, _privacyCss, _privacyJs
 
+#include <WebView2EnvironmentOptions.h>
+
 #include <shlobj.h>
 #include <string>
 
@@ -57,8 +59,18 @@ WebViewManager::WebViewManager(HWND host, PrivacyManager* privacy)
 void WebViewManager::Initialize() {
     const std::wstring udf = UserDataFolder();
 
+    // WebView2 defaults to a process-per-site model sized for a browser, which
+    // costs ~1.5 GB across ~25 processes for what is effectively one page.
+    // Sharing one renderer and capping the JS heap brings that down a long way.
+    auto options = Microsoft::WRL::Make<CoreWebView2EnvironmentOptions>();
+    options->put_AdditionalBrowserArguments(
+        L"--process-per-site "                    // one renderer for web.whatsapp.com
+        L"--renderer-process-limit=2 "
+        L"--disable-features=SpareRendererForSitePerProcess "  // no idle spare renderer
+        L"--js-flags=--max-old-space-size=256");
+
     HRESULT hr = CreateCoreWebView2EnvironmentWithOptions(
-        nullptr, udf.empty() ? nullptr : udf.c_str(), nullptr,
+        nullptr, udf.empty() ? nullptr : udf.c_str(), options.Get(),
         Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
             [this](HRESULT r, ICoreWebView2Environment* env) {
                 return OnEnvironmentReady(r, env);

@@ -71,18 +71,27 @@
   // Mark elements with our own stable classes. WhatsApp's generated class names
   // live only in selectors.js; the CSS keys off wap-t-* exclusively.
   function tagWithin(root) {
+    const t0 = performance.now();
+    stats.passes++;
     const sel = SEL();
     for (const cat of CATEGORIES) {
       const list = sel[cat];
       if (!list) continue;
       const cls = CLASS_FOR[cat];
+      const query = list.join(',');
       let matches;
       try {
-        matches = root.querySelectorAll(list.join(','));
+        matches = root.querySelectorAll(query);
       } catch (e) {
         continue; // a malformed selector must not take the whole pass down
       }
-      for (const el of matches) el.classList.add(cls);
+      for (const el of matches)
+        if (!el.classList.contains(cls)) el.classList.add(cls);
+      // querySelectorAll only looks at descendants, but when the observer hands
+      // us a newly added node the node itself can be a target.
+      try {
+        if (root.nodeType === 1 && root.matches(query)) root.classList.add(cls);
+      } catch (e) { /* ignore */ }
     }
 
     // Categories blur containers, so mark the chrome that must stay readable
@@ -94,12 +103,20 @@
           el.classList.add('wap-t-exempt');
       } catch (e) { /* ignore a bad selector */ }
     }
+
+    stats.ms += performance.now() - t0;
   }
+
+  // Instrumentation for `__wapStats()` -- cost of the tagging passes, so a slow
+  // session can be attributed to the privacy engine or ruled out.
+  const stats = { passes: 0, ms: 0, tagged: 0 };
 
   function retagAll() {
     if (!document.body) return;
     tagWithin(document.body);
   }
+
+  window.__wapStats = () => ({ ...stats, avgMs: +(stats.ms / (stats.passes || 1)).toFixed(3) });
 
   // --- state application ----------------------------------------------------
   function apply() {
@@ -121,14 +138,24 @@
   // rAF does not fire while the window is hidden or minimized, which would stall
   // tagging exactly when content must stay blurred. Race it against a timer so
   // whichever fires first wins.
+  //
+  // Only the subtrees the observer reported are re-tagged. Re-scanning the whole
+  // document on every mutation is what made this pin the CPU on a busy chat.
   let pending = false;
-  function scheduleRetag() {
+  let dirty = [];
+  function scheduleRetag(roots) {
+    if (roots && roots.length) dirty.push(...roots);
+    else dirty = null;                     // null => full sweep
     if (pending) return;
     pending = true;
     const flush = () => {
       if (!pending) return;
       pending = false;
-      retagAll();
+      const scope = dirty;
+      dirty = [];
+      if (!scope) return retagAll();
+      for (const el of scope)
+        if (el.isConnected) tagWithin(el);
     };
     requestAnimationFrame(flush);
     setTimeout(flush, 32);
@@ -136,7 +163,21 @@
 
   function startObserver() {
     if (!document.body) return false;
-    new MutationObserver(scheduleRetag).observe(document.body, {
+    new MutationObserver((records) => {
+      // Collect only the element subtrees that actually changed.
+      const roots = [];
+      for (const r of records) {
+        if (r.type === 'attributes') {
+          if (r.target.nodeType === 1) roots.push(r.target);
+          continue;
+        }
+        for (const n of r.addedNodes)
+          if (n.nodeType === 1) roots.push(n);
+        // A text-only change still needs its container re-checked.
+        if (!r.addedNodes.length && r.target.nodeType === 1) roots.push(r.target);
+      }
+      if (roots.length) scheduleRetag(roots);
+    }).observe(document.body, {
       childList: true,
       subtree: true,
       // Re-tag when an existing node is restyled/reused: the virtualized chat
@@ -196,11 +237,11 @@
     boot();
   }
 
-  // WhatsApp renders its shell asynchronously well after DOMContentLoaded, and
-  // swaps the whole pane on login. Re-tag on a slow timer as a safety net for
-  // anything the observer's filters miss.
-  // ponytail: 2s poll; drop it if the observer proves sufficient in practice.
-  setInterval(retagAll, 2000);
+  // WhatsApp swaps its whole shell on login and on some route changes. The
+  // observer covers incremental updates, so this only needs to catch a wholesale
+  // pane replacement -- a slow, cheap backstop rather than a hot poll.
+  // ponytail: 10s backstop; remove if the observer proves sufficient.
+  setInterval(retagAll, 10000);
 
   // Applies a partial state patch. Used by the native bridge path above and by
   // the self-check harness (web/test_privacy.js).

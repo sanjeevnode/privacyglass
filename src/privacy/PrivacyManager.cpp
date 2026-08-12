@@ -27,6 +27,15 @@ void PrivacyManager::SetCategory(const char* key, bool value) {
     Publish();
 }
 
+bool PrivacyManager::GetCategory(const char* key) const {
+    if (!std::strcmp(key, "names"))       return state_.names;
+    if (!std::strcmp(key, "messages"))    return state_.messages;
+    if (!std::strcmp(key, "pictures"))    return state_.pictures;
+    if (!std::strcmp(key, "previews"))    return state_.previews;
+    if (!std::strcmp(key, "hoverReveal")) return state_.hoverReveal;
+    return false;
+}
+
 void PrivacyManager::Publish() const {
     if (sink_) sink_(state_);
 }

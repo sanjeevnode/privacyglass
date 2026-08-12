@@ -92,6 +92,16 @@
       check('names-only frees messages', !on('wap-hide-messages'));
       check('names-only frees pictures', !on('wap-hide-pictures'));
 
+      // --- the NATIVE path: state pushed over the bridge must apply ---------
+      // __wapApplyState is called directly by the tests above, which bypasses
+      // the bridge. The checkboxes go native -> PostWebMessageAsString -> here,
+      // so exercise that listener explicitly.
+      chrome.webview.dispatchEvent(new MessageEvent('message', {
+        data: JSON.stringify({ type: 'state', on: true, names: true,
+          messages: false, pictures: true, previews: true, hoverReveal: false }),
+      }));
+      check('bridge listener applies state', !on('wap-hide-messages') && on('wap-hide-names'));
+
       // --- hover reveal is wired and has a matching CSS rule ----------------
       window.__wapApplyState({ on: true, hoverReveal: true });
       check('hover flag applied', on('wap-hover-reveal'));

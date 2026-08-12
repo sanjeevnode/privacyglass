@@ -24,6 +24,8 @@ public:
     void Set(const State& s);
     void Toggle();                         // master on/off
     void SetCategory(const char* key, bool value);
+    bool GetCategory(const char* key) const;
+    void ToggleCategory(const char* key) { SetCategory(key, !GetCategory(key)); }
 
     // Serializes current state as the {"type":"state",...} bridge message.
     std::wstring ToJson() const;

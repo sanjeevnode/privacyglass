@@ -20,11 +20,13 @@ window.__wapSelectors = {
     '#pane-side [role="gridcell"] span[title]',
     '#main header span[title]',
     '#main header [role="button"] span[dir="auto"]',
-    // Group-message sender labels ("+91 91710 89361" above a bubble). These are
-    // colour-coded spans inside the bubble, NOT covered by the header rules.
-    '#main [data-pre-plain-text]',
-    '#main .message-in span[aria-label]',
-    '#main [role="row"] span[dir="auto"][class*="_ak"]',
+    // Group-message sender labels ("+91 91710 89361" above a bubble).
+    // Must match ONLY the label, never the bubble body: [data-pre-plain-text]
+    // and a bare span[dir="auto"] both match the whole message wrapper, and a
+    // blurred wrapper keeps the text blurred even when Messages is unchecked.
+    '#main .message-in [data-testid="author"]',
+    '#main [role="row"] span[aria-label]:not(.selectable-text)',
+    '#main .message-in > div > div > span[dir="auto"]:not(.selectable-text)',
     // Contact-info / drawer panel name.
     '[data-testid="drawer-right"] span[title]',
     'span[title][dir="auto"]',
