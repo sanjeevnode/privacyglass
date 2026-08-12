@@ -1,0 +1,65 @@
+name: Build installer
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write        # needed to publish the release
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 0.1.<run_number> -- monotonic without needing a tag. Switch the prefix
+      # here when you cut a real release.
+      - name: Derive version
+        id: ver
+        shell: pwsh
+        run: |
+          $v = "0.1.${{ github.run_number }}"
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "Version: $v"
+
+      - name: Configure
+        shell: pwsh
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DAPP_VERSION=${{ steps.ver.outputs.version }}
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build build --config Release
+
+      # The privacy engine is the whole product; a regression here must fail the
+      # build rather than ship. Runs headless -- no login, no network.
+      - name: Privacy engine self-check
+        shell: pwsh
+        run: |
+          $exe = "build\Release\WhatsAppPrivacy.exe"
+          $p = Start-Process $exe -ArgumentList '--selfcheck' -PassThru -Wait
+          if (Test-Path "build\Release\selfcheck.txt") { Get-Content "build\Release\selfcheck.txt" }
+          if ($p.ExitCode -ne 0) { throw "Self-check failed (exit $($p.ExitCode))" }
+
+      # Inno Setup is preinstalled on windows-latest runners.
+      - name: Build installer
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+              /DAppVersion=${{ steps.ver.outputs.version }} `
+              installer\WhatsAppPrivacy.iss
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WhatsAppPrivacy-${{ steps.ver.outputs.version }}-Setup
+          path: dist/*.exe
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: WhatsApp Privacy ${{ steps.ver.outputs.version }}
+          files: dist/*.exe
+          generate_release_notes: true

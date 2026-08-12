@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.24)
-project(WhatsAppPrivacy CXX)
+
+# CI passes -DAPP_VERSION=<x.y.z> derived from the run number; local builds get 0.0.0.
+if(NOT DEFINED APP_VERSION)
+  set(APP_VERSION "0.0.0")
+endif()
+project(WhatsAppPrivacy VERSION ${APP_VERSION} LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -13,15 +18,29 @@ FetchContent_Declare(webview2
   DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
 FetchContent_MakeAvailable(webview2)
 
+include(${CMAKE_SOURCE_DIR}/cmake/EmbedAssets.cmake)
+set(WEB_ASSETS_HEADER ${CMAKE_BINARY_DIR}/generated/WebAssets.h)
+embed_web_assets(${WEB_ASSETS_HEADER}
+  web/selectors.js
+  web/privacy.css
+  web/privacy.js
+  web/test_privacy.js)
+
+configure_file(src/version.rc.in ${CMAKE_BINARY_DIR}/generated/version.rc @ONLY)
+
 add_executable(WhatsAppPrivacy WIN32
+  ${CMAKE_BINARY_DIR}/generated/version.rc
   src/main.cpp
   src/app/Application.cpp
   src/window/MainWindow.cpp
   src/webview/WebViewManager.cpp
+  src/privacy/PrivacyManager.cpp
+  ${WEB_ASSETS_HEADER}
 )
 
 target_include_directories(WhatsAppPrivacy PRIVATE
   src
+  ${CMAKE_BINARY_DIR}/generated
   ${webview2_SOURCE_DIR}/build/native/include)
 
 # Static loader => single self-contained exe, no WebView2Loader.dll to ship.

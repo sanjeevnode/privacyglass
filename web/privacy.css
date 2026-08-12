@@ -1,0 +1,57 @@
+/* Privacy layer. Blur (not display:none) so layout never shifts -- WhatsApp's
+   virtualized list misbehaves if bubble heights change. */
+
+:root {
+  --wap-blur: 7px;
+  --wap-blur-pic: 12px;   /* faces need more than text to be unreadable */
+}
+
+/* ---------------------------------------------------------------------------
+   FAIL-SAFE BOOT BLUR
+   Applied to <html> by the injected script BEFORE WhatsApp renders anything,
+   and removed only once the app has painted and per-category rules are live.
+   If selectors break, this is what stands between the user and a leak: the
+   failure mode is an over-blurred window, never visible chat content.
+   --------------------------------------------------------------------------- */
+html.wap-boot body {
+  filter: blur(16px) !important;
+  pointer-events: none !important;
+}
+
+/* Category rules. Each is independent so the four checkboxes in Phase 5 work
+   on their own; the master toggle just sets all four. */
+.wap-hide-names   .wap-t-name,
+.wap-hide-messages .wap-t-message,
+.wap-hide-previews .wap-t-preview {
+  filter: blur(var(--wap-blur));
+  /* Blur alone leaves text selectable/copyable; kill that too. */
+  user-select: none;
+}
+
+.wap-hide-pictures .wap-t-picture {
+  filter: blur(var(--wap-blur-pic));
+}
+
+/* Transition only on the way OUT, so revealing feels smooth but hiding is
+   instantaneous -- a fade-to-blur would briefly show plaintext. */
+.wap-t-name, .wap-t-message, .wap-t-preview, .wap-t-picture {
+  transition: filter 120ms ease-out;
+}
+body.wap-privacy-on .wap-t-name,
+body.wap-privacy-on .wap-t-message,
+body.wap-privacy-on .wap-t-preview,
+body.wap-privacy-on .wap-t-picture {
+  transition: none;
+}
+
+/* ---------------------------------------------------------------------------
+   HOVER REVEAL (Phase 7, gated by settings flag `wap-hover-reveal`)
+   Reveals only the single hovered element, and re-blurs on mouse-leave.
+   --------------------------------------------------------------------------- */
+body.wap-hover-reveal .wap-t-name:hover,
+body.wap-hover-reveal .wap-t-message:hover,
+body.wap-hover-reveal .wap-t-preview:hover,
+body.wap-hover-reveal .wap-t-picture:hover {
+  filter: none;
+  user-select: auto;
+}

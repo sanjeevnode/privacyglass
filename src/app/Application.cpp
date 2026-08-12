@@ -4,7 +4,7 @@
 #include <windows.h>
 #include <objbase.h>
 
-int Application::Run(int showCmd) {
+int Application::Run(int showCmd, bool selfCheck) {
     // WebView2 requires an STA apartment on the UI thread.
     HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (FAILED(hr)) return 1;
@@ -12,8 +12,11 @@ int Application::Run(int showCmd) {
     int exitCode = 1;
     {
         MainWindow window;
+        window.SetSelfCheck(selfCheck);
+
         if (window.Create()) {
-            ShowWindow(window.Handle(), showCmd);
+            // Keep the self-check off-screen; it is a test run, not a UI.
+            ShowWindow(window.Handle(), selfCheck ? SW_HIDE : showCmd);
             UpdateWindow(window.Handle());
 
             MSG msg{};
