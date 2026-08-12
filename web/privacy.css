@@ -32,6 +32,17 @@ html.wap-boot body {
   filter: blur(var(--wap-blur-pic));
 }
 
+/* A parent's filter also rasterizes its descendants, and that cannot be undone
+   from below -- `filter:none` on a child does NOT restore sharpness. So exempt
+   chrome is handled by not blurring its container in the first place: the rules
+   above target the preview cell, and this keeps the timestamp/badge column out
+   of the blurred subtree by giving it no blur of its own. If a future selector
+   change puts chrome inside a blurred parent, blur the narrower element instead
+   of relying on this class. */
+.wap-t-exempt {
+  filter: none;
+}
+
 /* Transition only on the way OUT, so revealing feels smooth but hiding is
    instantaneous -- a fade-to-blur would briefly show plaintext. */
 .wap-t-name, .wap-t-message, .wap-t-preview, .wap-t-picture {

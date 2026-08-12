@@ -84,6 +84,16 @@
       }
       for (const el of matches) el.classList.add(cls);
     }
+
+    // Categories blur containers, so mark the chrome that must stay readable
+    // (timestamps, unread badges, delivery ticks) inside them.
+    const exempt = window.__wapExempt;
+    if (exempt && exempt.length) {
+      try {
+        for (const el of root.querySelectorAll(exempt.join(',')))
+          el.classList.add('wap-t-exempt');
+      } catch (e) { /* ignore a bad selector */ }
+    }
   }
 
   function retagAll() {

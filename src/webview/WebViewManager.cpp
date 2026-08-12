@@ -165,5 +165,7 @@ void WebViewManager::Resize() {
     if (!controller_) return;
     RECT bounds{};
     GetClientRect(host_, &bounds);
+    bounds.top = topInset_;                       // leave room for the toolbar
+    if (bounds.bottom < bounds.top) bounds.bottom = bounds.top;
     controller_->put_Bounds(bounds);
 }

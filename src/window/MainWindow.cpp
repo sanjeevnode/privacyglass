@@ -6,10 +6,111 @@ constexpr wchar_t kClassName[] = L"WhatsAppPrivacyWindow";
 constexpr wchar_t kTitle[]     = L"WhatsApp Privacy";
 constexpr int     kHotkeyId    = 1;   // Ctrl+Shift+P
 constexpr UINT_PTR kSelfCheckTimeoutId = 2;
+
+constexpr int kToolbarHeight = 40;
+
+// Control ids.
+constexpr int kIdMaster = 100;
+constexpr int kIdFirstCategory = 101;   // 101..104 in kCategories order
+
+struct Category { const char* key; const wchar_t* label; };
+constexpr Category kCategories[4] = {
+    { "names",    L"Names"    },
+    { "messages", L"Messages" },
+    { "pictures", L"Photos"   },
+    { "previews", L"Previews" },
+};
 }
 
 MainWindow::MainWindow() = default;
-MainWindow::~MainWindow() = default;
+
+MainWindow::~MainWindow() {
+    if (font_) DeleteObject(font_);
+}
+
+void MainWindow::CreateToolbar() {
+    const HINSTANCE inst = GetModuleHandleW(nullptr);
+
+    toolbar_ = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_LEFT,
+                               0, 0, 0, kToolbarHeight, hwnd_, nullptr, inst, nullptr);
+
+    // Match the shell UI font instead of the 1990s system default.
+    NONCLIENTMETRICSW ncm{ sizeof(ncm) };
+    if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0))
+        font_ = CreateFontIndirectW(&ncm.lfMessageFont);
+
+    auto styleChild = [&](HWND h) {
+        if (font_) SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
+    };
+
+    master_ = CreateWindowExW(0, L"BUTTON", L"Privacy Mode",
+        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+        0, 0, 0, 0, toolbar_, reinterpret_cast<HMENU>(kIdMaster), inst, nullptr);
+    styleChild(master_);
+
+    for (int i = 0; i < 4; ++i) {
+        checks_[i] = CreateWindowExW(0, L"BUTTON", kCategories[i].label,
+            WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+            0, 0, 0, 0, toolbar_,
+            reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdFirstCategory + i)),
+            inst, nullptr);
+        styleChild(checks_[i]);
+    }
+
+    SyncToolbar();
+}
+
+void MainWindow::LayoutChildren() {
+    RECT rc{};
+    GetClientRect(hwnd_, &rc);
+
+    if (toolbar_)
+        SetWindowPos(toolbar_, nullptr, 0, 0, rc.right, kToolbarHeight,
+                     SWP_NOZORDER);
+
+    // Lay the checkboxes out left-to-right, sized to their text.
+    int x = 10;
+    const int y = (kToolbarHeight - 22) / 2;
+    HDC dc = GetDC(toolbar_);
+    HGDIOBJ old = font_ ? SelectObject(dc, font_) : nullptr;
+
+    auto place = [&](HWND h, const wchar_t* text, int pad) {
+        SIZE sz{};
+        GetTextExtentPoint32W(dc, text, lstrlenW(text), &sz);
+        const int w = sz.cx + pad;
+        SetWindowPos(h, nullptr, x, y, w, 22, SWP_NOZORDER);
+        x += w + 12;
+    };
+
+    if (master_) place(master_, L"Privacy Mode", 28);
+    x += 8;   // visual gap between master and the per-category group
+    for (int i = 0; i < 4; ++i)
+        if (checks_[i]) place(checks_[i], kCategories[i].label, 26);
+
+    if (old) SelectObject(dc, old);
+    ReleaseDC(toolbar_, dc);
+
+    if (webview_) webview_->Resize();
+}
+
+// Pushes PrivacyManager state into the checkboxes. Categories are disabled while
+// the master toggle is off, since it gates them anyway.
+void MainWindow::SyncToolbar() {
+    if (!master_) return;
+    syncing_ = true;
+
+    const auto& s = privacy_.Get();
+    SendMessageW(master_, BM_SETCHECK, s.on ? BST_CHECKED : BST_UNCHECKED, 0);
+
+    const bool flags[4] = { s.names, s.messages, s.pictures, s.previews };
+    for (int i = 0; i < 4; ++i) {
+        if (!checks_[i]) continue;
+        SendMessageW(checks_[i], BM_SETCHECK, flags[i] ? BST_CHECKED : BST_UNCHECKED, 0);
+        EnableWindow(checks_[i], s.on);
+    }
+
+    syncing_ = false;
+}
 
 // Writes the JS self-check output to selfcheck.txt beside the exe and quits with
 // 0 (all passed) or 1 (any failure), so CI and the build script can gate on it.
@@ -97,8 +198,10 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
 LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_CREATE:
+        if (!selfCheck_) CreateToolbar();
         webview_ = std::make_unique<WebViewManager>(hwnd_, &privacy_);
         webview_->SetSelfCheck(selfCheck_);
+        webview_->SetTopInset(selfCheck_ ? 0 : kToolbarHeight);
         if (selfCheck_) {
             webview_->SetMessageHandler([this](const std::wstring& json) {
                 selfCheckLog_ += json + L"\r\n";
@@ -114,8 +217,30 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
         RegisterHotKey(hwnd_, kHotkeyId, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, 'P');
         return 0;
 
+    case WM_COMMAND: {
+        if (syncing_ || HIWORD(wp) != BN_CLICKED) return 0;
+        const int id = LOWORD(wp);
+        const HWND ctrl = reinterpret_cast<HWND>(lp);
+        const bool checked = SendMessageW(ctrl, BM_GETCHECK, 0, 0) == BST_CHECKED;
+
+        if (id == kIdMaster) {
+            auto s = privacy_.Get();
+            s.on = checked;
+            privacy_.Set(s);
+        } else if (id >= kIdFirstCategory && id < kIdFirstCategory + 4) {
+            privacy_.SetCategory(kCategories[id - kIdFirstCategory].key, checked);
+        } else {
+            return 0;
+        }
+        SyncToolbar();   // keeps the category enable/disable state consistent
+        return 0;
+    }
+
     case WM_HOTKEY:
-        if (wp == kHotkeyId) privacy_.Toggle();   // sink pushes it to the page
+        if (wp == kHotkeyId) {
+            privacy_.Toggle();   // sink pushes it to the page
+            SyncToolbar();       // hotkey and UI share one source of truth
+        }
         return 0;
 
     case WM_TIMER:
@@ -126,7 +251,7 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
 
     case WM_SIZE:
-        if (webview_) webview_->Resize();
+        LayoutChildren();
         return 0;
 
     case WM_DESTROY:

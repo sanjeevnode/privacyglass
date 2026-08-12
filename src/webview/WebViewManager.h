@@ -21,6 +21,9 @@ public:
     void Initialize();
     void Resize();
 
+    // Pixels reserved at the top of the client area for the native toolbar.
+    void SetTopInset(int px) { topInset_ = px; }
+
     // Fire-and-forget JSON to the page. Safe before the webview exists (drops).
     void PostJson(const std::wstring& json);
 
@@ -38,6 +41,7 @@ private:
     HWND host_;
     PrivacyManager* privacy_;
     bool selfCheck_ = false;
+    int  topInset_ = 0;
     Microsoft::WRL::ComPtr<ICoreWebView2Controller> controller_;
     Microsoft::WRL::ComPtr<ICoreWebView2> webview_;
     std::function<void(const std::wstring&)> onMessage_;
