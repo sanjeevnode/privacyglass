@@ -22,6 +22,7 @@ DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 UninstallDisplayName={#AppName}
 UninstallDisplayIcon={app}\{#AppExe}
+SetupIconFile=..\assets\icons\app.ico
 OutputDir=..\dist
 OutputBaseFilename=WhatsAppPrivacy-{#AppVersion}-Setup
 Compression=lzma2

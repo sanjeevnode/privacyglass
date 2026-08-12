@@ -12,7 +12,7 @@ public:
         bool messages    = true;
         bool pictures    = true;
         bool previews    = true;
-        bool hoverReveal = false;
+        bool hoverReveal = true;   // hover to peek without toggling privacy off
     };
 
     // Invoked whenever state changes; wired to the WebView JS push.

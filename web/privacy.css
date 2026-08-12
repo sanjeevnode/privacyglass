@@ -56,8 +56,14 @@ body.wap-privacy-on .wap-t-picture {
 }
 
 /* ---------------------------------------------------------------------------
-   HOVER REVEAL (Phase 7, gated by settings flag `wap-hover-reveal`)
-   Reveals only the single hovered element, and re-blurs on mouse-leave.
+   HOVER REVEAL
+   Peek at content without toggling privacy off. Re-blurs on mouse-leave.
+
+   `:hover` matches ancestors as well as the element under the pointer. That is
+   what we want here: a blurred ancestor rasterizes its children, so revealing an
+   inner span only shows through if its blurred ancestors clear too. The result
+   is that hovering reveals the hovered item and its blurred parents -- which for
+   a chat row means the row you point at, not the whole list.
    --------------------------------------------------------------------------- */
 body.wap-hover-reveal .wap-t-name:hover,
 body.wap-hover-reveal .wap-t-message:hover,

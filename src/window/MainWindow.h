@@ -28,6 +28,7 @@ private:
     HWND toolbar_ = nullptr;
     HWND master_ = nullptr;
     HWND checks_[4]{};              // names, messages, pictures, previews
+    HWND hover_ = nullptr;
     HFONT font_ = nullptr;
     bool selfCheck_ = false;
     bool syncing_ = false;          // guards against feedback while setting checks

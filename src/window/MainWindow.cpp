@@ -12,6 +12,7 @@ constexpr int kToolbarHeight = 40;
 // Control ids.
 constexpr int kIdMaster = 100;
 constexpr int kIdFirstCategory = 101;   // 101..104 in kCategories order
+constexpr int kIdHover = 110;
 
 struct Category { const char* key; const wchar_t* label; };
 constexpr Category kCategories[4] = {
@@ -57,6 +58,11 @@ void MainWindow::CreateToolbar() {
         styleChild(checks_[i]);
     }
 
+    hover_ = CreateWindowExW(0, L"BUTTON", L"Hover to reveal",
+        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+        0, 0, 0, 0, toolbar_, reinterpret_cast<HMENU>(kIdHover), inst, nullptr);
+    styleChild(hover_);
+
     SyncToolbar();
 }
 
@@ -86,6 +92,8 @@ void MainWindow::LayoutChildren() {
     x += 8;   // visual gap between master and the per-category group
     for (int i = 0; i < 4; ++i)
         if (checks_[i]) place(checks_[i], kCategories[i].label, 26);
+    x += 8;
+    if (hover_) place(hover_, L"Hover to reveal", 26);
 
     if (old) SelectObject(dc, old);
     ReleaseDC(toolbar_, dc);
@@ -107,6 +115,11 @@ void MainWindow::SyncToolbar() {
         if (!checks_[i]) continue;
         SendMessageW(checks_[i], BM_SETCHECK, flags[i] ? BST_CHECKED : BST_UNCHECKED, 0);
         EnableWindow(checks_[i], s.on);
+    }
+
+    if (hover_) {
+        SendMessageW(hover_, BM_SETCHECK, s.hoverReveal ? BST_CHECKED : BST_UNCHECKED, 0);
+        EnableWindow(hover_, s.on);   // nothing to reveal when privacy is off
     }
 
     syncing_ = false;
@@ -168,7 +181,14 @@ bool MainWindow::Create() {
     wc.hCursor       = LoadCursorW(nullptr, IDC_ARROW);
     wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
     wc.lpszClassName = kClassName;
-    wc.hIcon         = LoadIconW(nullptr, IDI_APPLICATION);
+    // Resource id 1 is the app icon (see version.rc.in). LoadIconW picks the
+    // large size; hIconSm gets the 16x16 frame for the title bar.
+    wc.hIcon   = static_cast<HICON>(LoadImageW(wc.hInstance, MAKEINTRESOURCEW(1),
+                     IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED));
+    wc.hIconSm = static_cast<HICON>(LoadImageW(wc.hInstance, MAKEINTRESOURCEW(1),
+                     IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
+                     GetSystemMetrics(SM_CYSMICON), LR_SHARED));
+    if (!wc.hIcon) wc.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
     RegisterClassExW(&wc);
 
     hwnd_ = CreateWindowExW(
@@ -229,6 +249,8 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
             privacy_.Set(s);
         } else if (id >= kIdFirstCategory && id < kIdFirstCategory + 4) {
             privacy_.SetCategory(kCategories[id - kIdFirstCategory].key, checked);
+        } else if (id == kIdHover) {
+            privacy_.SetCategory("hoverReveal", checked);
         } else {
             return 0;
         }

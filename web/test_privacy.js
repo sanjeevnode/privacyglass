@@ -92,6 +92,16 @@
       check('names-only frees messages', !on('wap-hide-messages'));
       check('names-only frees pictures', !on('wap-hide-pictures'));
 
+      // --- hover reveal is wired and has a matching CSS rule ----------------
+      window.__wapApplyState({ on: true, hoverReveal: true });
+      check('hover flag applied', on('wap-hover-reveal'));
+      check('hover rule exists', rules.some(r =>
+        r.selectorText.includes('wap-hover-reveal') &&
+        r.selectorText.includes(':hover') &&
+        r.style.filter === 'none'));
+      window.__wapApplyState({ hoverReveal: false });
+      check('hover flag cleared', !on('wap-hover-reveal'));
+
       // --- MutationObserver: a message arriving while ON must self-tag ------
       window.__wapApplyState({ on: true, names: true, messages: true, pictures: true, previews: true });
       const incoming = document.createElement('div');

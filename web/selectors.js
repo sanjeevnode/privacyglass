@@ -65,9 +65,12 @@ window.__wapSelectors = {
     // The preview text row only -- NOT the whole gridcell, because an ancestor's
     // blur also rasterizes the timestamp and unread badge and cannot be undone
     // on the child.
+    // Innermost text spans only. A bare span[dir="auto"] also matches the row
+    // wrapper, and blurring that ancestor drags the avatar down with it -- which
+    // makes the Photos checkbox look broken.
     '#pane-side [role="listitem"] [role="gridcell"] span[dir="ltr"]',
-    '#pane-side [role="listitem"] span[dir="ltr"]',
-    '#pane-side [role="listitem"] span[dir="auto"]:not([title])',
+    '#pane-side [role="listitem"] span[dir="ltr"]:not(:has(img))',
+    '#pane-side [role="listitem"] span[dir="auto"]:not([title]):not(:has(img))',
     '#main [data-testid="media-content"]',
     '#main .message-in img, #main .message-out img',
   ],
