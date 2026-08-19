@@ -137,6 +137,47 @@
     return out;
   };
 
+  // Diagnostic: elements carrying more than one category class. An overlap means
+  // one category's blur cannot be switched off independently of the other, which
+  // looks like a broken checkbox.
+  // Diagnostic: preview elements whose blur actually comes from a tagged
+  // ANCESTOR. A parent's filter rasterizes its children and cannot be undone
+  // from below, so the child's own category checkbox appears to do nothing.
+  window.__wapAncestorBleed = () => {
+    const classes = ['wap-t-name', 'wap-t-message', 'wap-t-picture', 'wap-t-preview'];
+    const out = [];
+    for (const el of document.querySelectorAll('.wap-t-preview')) {
+      for (let p = el.parentElement; p; p = p.parentElement) {
+        const hit = classes.filter(c => p.classList.contains(c));
+        if (hit.length) {
+          out.push({
+            child: 'preview: ' + (el.textContent || '').trim().slice(0, 24),
+            blurredBy: hit.join('+'),
+            ancestor: p.tagName,
+          });
+          break;
+        }
+      }
+    }
+    return { count: out.length, sample: out.slice(0, 8) };
+  };
+
+  window.__wapOverlaps = () => {
+    const classes = ['wap-t-name', 'wap-t-message', 'wap-t-picture', 'wap-t-preview'];
+    const out = [];
+    for (const el of document.querySelectorAll('.' + classes.join(',.'))) {
+      const hit = classes.filter(c => el.classList.contains(c));
+      if (hit.length > 1) {
+        out.push({
+          tags: hit.join('+'),
+          tag: el.tagName,
+          text: (el.textContent || '').trim().slice(0, 30),
+        });
+      }
+    }
+    return { count: out.length, sample: out.slice(0, 10) };
+  };
+
   // Diagnostic: describe every <img> on the page and whether we tagged it.
   // Used to fix selectors against the real DOM instead of guessing.
   window.__wapProbe = () => [...document.querySelectorAll('img')].slice(0, 25).map(el => ({

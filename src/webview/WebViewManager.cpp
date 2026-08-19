@@ -181,7 +181,9 @@ void WebViewManager::DumpDiagnostics() {
     webview_->ExecuteScript(
         L"JSON.stringify({stats:window.__wapStats&&__wapStats(),"
         L"imgs:window.__wapProbe&&__wapProbe(),"
-        L"counts:window.__wapSelectorCounts&&__wapSelectorCounts()},null,1)",
+        L"counts:window.__wapSelectorCounts&&__wapSelectorCounts(),"
+        L"overlaps:window.__wapOverlaps&&__wapOverlaps(),"
+        L"bleed:window.__wapAncestorBleed&&__wapAncestorBleed()},null,1)",
         Microsoft::WRL::Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
             [](HRESULT, LPCWSTR json) -> HRESULT {
                 if (!json) return S_OK;

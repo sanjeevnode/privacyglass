@@ -15,10 +15,16 @@
 window.__wapSelectors = {
   // Contact/group display names: chat list rows and the open chat's header.
   names: [
-    '#pane-side [role="gridcell"] span[title]',   // verified: 133 matches
-    'span[title][dir="auto"]',                    // verified: 67 matches
-    '#main header span[title]',
-    '#main header span[dir="auto"]',
+    // Innermost titled span only. A bare span[title][dir="auto"] also matches
+    // the row wrapper that CONTAINS the preview text, and an ancestor's blur
+    // rasterizes its children -- so the Previews checkbox could never reveal
+    // them. Verified with Ctrl+Shift+D: that rule accounted for 76 previews
+    // being blurred by a name ancestor.
+    // :not(:has(span)) -- not :has(span[title]) -- because the wrapper this must
+    // exclude contains the *preview* spans, which carry no title of their own.
+    '#pane-side [role="gridcell"] span[title]:not(:has(span))',
+    '#main header span[title]:not(:has(span[title]))',
+    '#main header span[dir="auto"]:not(:has(span))',
   ],
 
   // Message bubble text in the open conversation. WhatsApp's class names here
@@ -52,8 +58,8 @@ window.__wapSelectors = {
   previews: [
     // Innermost text spans only. A bare span[dir="auto"] also matches the row
     // wrapper, and blurring that ancestor drags the avatar down with it.
-    '#pane-side [role="gridcell"] span[dir="ltr"]',
-    '#pane-side [role="gridcell"] span[dir="auto"]:not([title])',
+    '#pane-side [role="gridcell"] span[dir="ltr"]:not(:has(span))',
+    '#pane-side [role="gridcell"] span[dir="auto"]:not([title]):not(:has(span))',
     '#main [role="row"] img',
   ],
 };
