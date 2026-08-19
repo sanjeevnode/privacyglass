@@ -51,6 +51,9 @@ void MainWindow::CreateToolbar() {
     HMENU sys = GetSystemMenu(hwnd_, FALSE);
     if (!sys) return;
 
+    // Do NOT remove SC_CLOSE here. Windows drives the title-bar X button from
+    // this menu entry, so deleting it greys out the X and leaves Alt+F4 as the
+    // only way to quit.
     AppendMenuW(sys, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(sys, MF_STRING, kIdMaster, L"Privacy Mode\tCtrl+Shift+P");
     for (int i = 0; i < 4; ++i)
@@ -123,11 +126,8 @@ void MainWindow::CheckForUpdates() {
     SetCursor(prev);
 
     if (!rel.available) {
-        MessageBoxW(hwnd_,
-            L"You are running the latest version.\n\n"
-            L"(If you are offline, or GitHub could not be reached, this message "
-            L"also appears -- it never reports a false update.)",
-            L"PrivacyGlass", MB_OK | MB_ICONINFORMATION);
+        MessageBoxW(hwnd_, L"You are running the latest version.",
+                    L"PrivacyGlass", MB_OK | MB_ICONINFORMATION);
         return;
     }
 
