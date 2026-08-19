@@ -10,7 +10,9 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    # Pinned, not windows-latest: the image rolls forward (it is Windows 2025 /
+    # VS 2026 now), which silently changes the toolchain under the build.
+    runs-on: windows-2022
 
     steps:
       - uses: actions/checkout@v4
@@ -25,9 +27,12 @@ jobs:
           "version=$v" >> $env:GITHUB_OUTPUT
           Write-Host "Version: $v"
 
+      # The -D argument must be quoted: pwsh otherwise splits "0.1.1" on the dots
+      # and passes only "0". Let CMake pick the newest installed generator rather
+      # than pinning "Visual Studio 17 2022" -- the runner image moves on.
       - name: Configure
         shell: pwsh
-        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DAPP_VERSION=${{ steps.ver.outputs.version }}
+        run: cmake -S . -B build -A x64 "-DAPP_VERSION=${{ steps.ver.outputs.version }}"
 
       - name: Build
         shell: pwsh
