@@ -26,6 +26,21 @@ embed_web_assets(${WEB_ASSETS_HEADER}
   web/privacy.js
   web/test_privacy.js)
 
+# Parse APP_VERSION directly rather than relying on PROJECT_VERSION_*: a missing
+# component leaves those empty, which emits "1,,,0" and fails the RC compiler.
+string(REGEX MATCH "^([0-9]+)\\.([0-9]+)\\.([0-9]+)" _v "${APP_VERSION}")
+if(_v)
+  set(VER_MAJOR ${CMAKE_MATCH_1})
+  set(VER_MINOR ${CMAKE_MATCH_2})
+  set(VER_PATCH ${CMAKE_MATCH_3})
+else()
+  set(VER_MAJOR 0)
+  set(VER_MINOR 0)
+  set(VER_PATCH 0)
+endif()
+set(APP_VERSION_FULL "${VER_MAJOR}.${VER_MINOR}.${VER_PATCH}")
+message(STATUS "App version: ${APP_VERSION_FULL}")
+
 configure_file(src/version.rc.in ${CMAKE_BINARY_DIR}/generated/version.rc @ONLY)
 
 add_executable(WhatsAppPrivacy WIN32
@@ -46,6 +61,13 @@ target_include_directories(WhatsAppPrivacy PRIVATE
 # Static loader => single self-contained exe, no WebView2Loader.dll to ship.
 target_link_libraries(WhatsAppPrivacy PRIVATE
   ${webview2_SOURCE_DIR}/build/native/x64/WebView2LoaderStatic.lib
-  version shlwapi)
+  version shlwapi comctl32)
 
 target_compile_definitions(WhatsAppPrivacy PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+
+# We supply our own manifest via the .rc; stop the linker adding a second one.
+target_link_options(WhatsAppPrivacy PRIVATE /MANIFEST:NO)
+
+# Sources are UTF-8. Without this MSVC reads them as ANSI and any non-ASCII
+# literal becomes mojibake ("About..." rendering as "Aboutâ€¦").
+target_compile_options(WhatsAppPrivacy PRIVATE /utf-8)

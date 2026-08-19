@@ -3,9 +3,12 @@
 // Lowest-numbered icon resource becomes the exe's shell icon.
 1 ICON "@CMAKE_SOURCE_DIR@/assets/icons/app.ico"
 
+// CREATEPROCESS_MANIFEST_RESOURCE_ID (1): comctl32 v6 + PerMonitorV2 DPI.
+1 24 "@CMAKE_SOURCE_DIR@/src/app.manifest"
+
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION    @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
- PRODUCTVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+ FILEVERSION    @VER_MAJOR@,@VER_MINOR@,@VER_PATCH@,0
+ PRODUCTVERSION @VER_MAJOR@,@VER_MINOR@,@VER_PATCH@,0
  FILEFLAGSMASK  VS_FFI_FILEFLAGSMASK
  FILEFLAGS      0x0L
  FILEOS         VOS_NT_WINDOWS32
@@ -18,11 +21,11 @@ BEGIN
         BEGIN
             VALUE "CompanyName",      "WhatsApp Privacy"
             VALUE "FileDescription",  "WhatsApp Privacy"
-            VALUE "FileVersion",      "@PROJECT_VERSION@.0"
+            VALUE "FileVersion",      "@APP_VERSION_FULL@.0"
             VALUE "InternalName",     "WhatsAppPrivacy"
             VALUE "OriginalFilename", "WhatsAppPrivacy.exe"
             VALUE "ProductName",      "WhatsApp Privacy"
-            VALUE "ProductVersion",   "@PROJECT_VERSION@.0"
+            VALUE "ProductVersion",   "@APP_VERSION_FULL@.0"
         END
     END
     BLOCK "VarFileInfo"

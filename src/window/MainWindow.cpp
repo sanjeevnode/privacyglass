@@ -1,7 +1,10 @@
 #include "window/MainWindow.h"
 #include "webview/WebViewManager.h"
 
-#include <windowsx.h>   // GET_X_LPARAM / GET_Y_LPARAM
+#include <windowsx.h>    // GET_X_LPARAM / GET_Y_LPARAM
+#include <commctrl.h>    // TaskDialogIndirect
+#include <shellapi.h>    // ShellExecuteW
+#include <vector>
 
 namespace {
 constexpr wchar_t kClassName[] = L"WhatsAppPrivacyWindow";
@@ -17,6 +20,9 @@ constexpr UINT_PTR kSelfCheckTimeoutId = 2;
 constexpr int kIdMaster        = 0x0010;
 constexpr int kIdFirstCategory = 0x0020;   // 0x20,0x30,0x40,0x50
 constexpr int kIdHover         = 0x0060;
+constexpr int kIdAbout         = 0x0070;
+
+constexpr wchar_t kRepoUrl[] = L"https://github.com/sanjeevnode/win-whatsapp-privacy";
 
 struct Category { const char* key; const wchar_t* label; };
 constexpr Category kCategories[4] = {
@@ -46,6 +52,8 @@ void MainWindow::CreateToolbar() {
         AppendMenuW(sys, MF_STRING, kIdFirstCategory + i * 16, kCategories[i].label);
     AppendMenuW(sys, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(sys, MF_STRING, kIdHover, L"Hover to reveal");
+    AppendMenuW(sys, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(sys, MF_STRING, kIdAbout, L"About...");
 
     SyncSystemMenu();
 }
@@ -73,6 +81,70 @@ void MainWindow::SyncSystemMenu() {
 
 void MainWindow::LayoutChildren() {
     if (webview_) webview_->Resize();
+}
+
+// Reads FileVersion out of our own version resource, so the dialog always shows
+// the version CI stamped rather than a hardcoded string.
+static std::wstring AppVersion() {
+    wchar_t path[MAX_PATH]{};
+    GetModuleFileNameW(nullptr, path, MAX_PATH);
+
+    DWORD dummy = 0;
+    const DWORD size = GetFileVersionInfoSizeW(path, &dummy);
+    if (!size) return L"unknown";
+
+    std::vector<BYTE> buf(size);
+    if (!GetFileVersionInfoW(path, 0, size, buf.data())) return L"unknown";
+
+    VS_FIXEDFILEINFO* fi = nullptr;
+    UINT len = 0;
+    if (!VerQueryValueW(buf.data(), L"\\", reinterpret_cast<LPVOID*>(&fi), &len) || !fi)
+        return L"unknown";
+
+    wchar_t out[64];
+    swprintf_s(out, L"%u.%u.%u",
+               HIWORD(fi->dwFileVersionMS), LOWORD(fi->dwFileVersionMS),
+               HIWORD(fi->dwFileVersionLS));
+    return out;
+}
+
+void MainWindow::ShowAbout() {
+    const std::wstring version = L"Version " + AppVersion();
+    const std::wstring body =
+        L"Blurs names, messages, photos and previews in WhatsApp Web.\n\n"
+        L"Everything runs locally: no server, no accounts, and chat content is "
+        L"never written to disk or logged.\n\n"
+        // ASCII only: this file is UTF-8 but MSVC reads sources as ANSI unless
+        // told otherwise, so non-ASCII literals arrive as mojibake.
+        L"<A HREF=\"https://sanjeevnode.in\">sanjeevnode.in</A>"
+        L"          "
+        L"<A HREF=\"" + std::wstring(kRepoUrl) + L"\">Source code</A>";
+
+    TASKDIALOGCONFIG cfg{ sizeof(cfg) };
+    cfg.hwndParent           = hwnd_;
+    cfg.dwFlags              = TDF_ENABLE_HYPERLINKS | TDF_USE_HICON_MAIN;
+    cfg.hMainIcon            = static_cast<HICON>(LoadImageW(GetModuleHandleW(nullptr),
+                                   MAKEINTRESOURCEW(1), IMAGE_ICON, 48, 48, LR_SHARED));
+    cfg.dwCommonButtons      = TDCBF_CLOSE_BUTTON;
+    cfg.pszWindowTitle       = L"About WhatsApp Privacy";
+    cfg.pszMainInstruction   = L"WhatsApp Privacy";
+    cfg.pszContent           = body.c_str();
+    cfg.pszFooter            = version.c_str();
+    // Hyperlinks are inert unless the app opens them itself.
+    cfg.pfCallback = [](HWND, UINT msg, WPARAM, LPARAM lp, LONG_PTR) -> HRESULT {
+        if (msg == TDN_HYPERLINK_CLICKED)
+            ShellExecuteW(nullptr, L"open", reinterpret_cast<LPCWSTR>(lp),
+                          nullptr, nullptr, SW_SHOWNORMAL);
+        return S_OK;
+    };
+
+    if (FAILED(TaskDialogIndirect(&cfg, nullptr, nullptr, nullptr))) {
+        // TaskDialog needs a comctl32 v6 manifest; fall back if it is missing.
+        MessageBoxW(hwnd_,
+            (L"WhatsApp Privacy " + AppVersion() +
+             L"\n\nhttps://sanjeevnode.in\n" + kRepoUrl).c_str(),
+            L"About WhatsApp Privacy", MB_OK | MB_ICONINFORMATION);
+    }
 }
 
 // Writes the JS self-check output to selfcheck.txt beside the exe and quits with
@@ -202,6 +274,7 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
             }
         }
         if (wp == kIdHover) { privacy_.ToggleCategory("hoverReveal"); return 0; }
+        if (wp == kIdAbout) { ShowAbout(); return 0; }
         break;
 
     case WM_INITMENUPOPUP:

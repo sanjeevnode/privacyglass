@@ -22,6 +22,7 @@ private:
     void    ReportSelfCheck(const std::wstring& json);
     void    CreateToolbar();        // appends privacy items to the window menu
     void    SyncSystemMenu();       // refresh those items' check marks
+    void    ShowAbout();
     void    LayoutChildren();
 
     HWND hwnd_ = nullptr;
