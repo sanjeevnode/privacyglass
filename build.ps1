@@ -12,7 +12,7 @@ $cmake = Join-Path $vs 'Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\c
 & $cmake -S $PSScriptRoot -B "$PSScriptRoot\build" -G "Visual Studio 17 2022" -A x64
 & $cmake --build "$PSScriptRoot\build" --config Release
 
-$exe = "$PSScriptRoot\build\Release\WhatsAppPrivacy.exe"
+$exe = "$PSScriptRoot\build\Release\PrivacyGlass.exe"
 Write-Host "`nBuilt: $exe"
 
 if (-not $SkipTests) {

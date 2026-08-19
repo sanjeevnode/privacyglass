@@ -43,7 +43,7 @@ jobs:
       - name: Privacy engine self-check
         shell: pwsh
         run: |
-          $exe = "build\Release\WhatsAppPrivacy.exe"
+          $exe = "build\Release\PrivacyGlass.exe"
           $p = Start-Process $exe -ArgumentList '--selfcheck' -PassThru -Wait
           if (Test-Path "build\Release\selfcheck.txt") { Get-Content "build\Release\selfcheck.txt" }
           if ($p.ExitCode -ne 0) { throw "Self-check failed (exit $($p.ExitCode))" }
@@ -54,17 +54,17 @@ jobs:
         run: |
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
               /DAppVersion=${{ steps.ver.outputs.version }} `
-              installer\WhatsAppPrivacy.iss
+              installer\PrivacyGlass.iss
 
       - uses: actions/upload-artifact@v4
         with:
-          name: WhatsAppPrivacy-${{ steps.ver.outputs.version }}-Setup
+          name: PrivacyGlass-${{ steps.ver.outputs.version }}-Setup
           path: dist/*.exe
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.ver.outputs.version }}
-          name: WhatsApp Privacy ${{ steps.ver.outputs.version }}
+          name: PrivacyGlass ${{ steps.ver.outputs.version }}
           files: dist/*.exe
           generate_release_notes: true

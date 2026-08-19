@@ -1,13 +1,13 @@
 ; Inno Setup script -- produces a per-user installer with a proper
 ; "Apps & features" / Control Panel entry (install + uninstall).
-; Version is injected by CI:  iscc /DAppVersion=1.2.3 WhatsAppPrivacy.iss
+; Version is injected by CI:  iscc /DAppVersion=1.2.3 PrivacyGlass.iss
 
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
 
-#define AppName "WhatsApp Privacy"
-#define AppExe  "WhatsAppPrivacy.exe"
+#define AppName "PrivacyGlass"
+#define AppExe  "PrivacyGlass.exe"
 
 [Setup]
 ; A stable GUID is what lets an upgrade replace the previous install instead of
@@ -18,8 +18,8 @@ AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
 AppPublisher=sanjeevnode
 AppPublisherURL=https://sanjeevnode.in
-AppSupportURL=https://github.com/sanjeevnode/win-whatsapp-privacy
-AppUpdatesURL=https://github.com/sanjeevnode/win-whatsapp-privacy/releases
+AppSupportURL=https://github.com/sanjeevnode/privacyglass
+AppUpdatesURL=https://github.com/sanjeevnode/privacyglass/releases
 VersionInfoVersion={#AppVersion}
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
@@ -27,7 +27,7 @@ UninstallDisplayName={#AppName}
 UninstallDisplayIcon={app}\{#AppExe}
 SetupIconFile=..\assets\icons\app.ico
 OutputDir=..\dist
-OutputBaseFilename=WhatsAppPrivacy-{#AppVersion}-Setup
+OutputBaseFilename=PrivacyGlass-{#AppVersion}-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -83,4 +83,4 @@ end;
 [UninstallDelete]
 ; The WebView2 profile holds the logged-in WhatsApp session; remove it on
 ; uninstall so no chat data is left behind.
-Type: filesandordirs; Name: "{localappdata}\WhatsAppPrivacy"
+Type: filesandordirs; Name: "{localappdata}\PrivacyGlass"

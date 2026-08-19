@@ -11,7 +11,7 @@ using namespace Microsoft::WRL;
 
 namespace {
 
-// %LOCALAPPDATA%\WhatsAppPrivacy\WebView2 -- persistent so the WhatsApp session
+// %LOCALAPPDATA%\PrivacyGlass\WebView2 -- persistent so the WhatsApp session
 // (and therefore the QR login) survives restarts.
 std::wstring UserDataFolder() {
     PWSTR local = nullptr;
@@ -19,7 +19,7 @@ std::wstring UserDataFolder() {
         return L"";
     std::wstring path(local);
     CoTaskMemFree(local);
-    path += L"\\WhatsAppPrivacy\\WebView2";
+    path += L"\\PrivacyGlass\\WebView2";
     return path;
 }
 
@@ -80,7 +80,7 @@ void WebViewManager::Initialize() {
         MessageBoxW(host_,
             L"Failed to create the WebView2 environment.\n\n"
             L"Ensure the Microsoft Edge WebView2 Runtime is installed.",
-            L"WhatsApp Privacy", MB_ICONERROR | MB_OK);
+            L"PrivacyGlass", MB_ICONERROR | MB_OK);
     }
 }
 

@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.24)
 if(NOT DEFINED APP_VERSION)
   set(APP_VERSION "0.0.0")
 endif()
-project(WhatsAppPrivacy VERSION ${APP_VERSION} LANGUAGES CXX)
+project(PrivacyGlass VERSION ${APP_VERSION} LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -43,31 +43,32 @@ message(STATUS "App version: ${APP_VERSION_FULL}")
 
 configure_file(src/version.rc.in ${CMAKE_BINARY_DIR}/generated/version.rc @ONLY)
 
-add_executable(WhatsAppPrivacy WIN32
+add_executable(PrivacyGlass WIN32
   ${CMAKE_BINARY_DIR}/generated/version.rc
   src/main.cpp
   src/app/Application.cpp
   src/window/MainWindow.cpp
   src/webview/WebViewManager.cpp
   src/privacy/PrivacyManager.cpp
+  src/settings/Settings.cpp
   ${WEB_ASSETS_HEADER}
 )
 
-target_include_directories(WhatsAppPrivacy PRIVATE
+target_include_directories(PrivacyGlass PRIVATE
   src
   ${CMAKE_BINARY_DIR}/generated
   ${webview2_SOURCE_DIR}/build/native/include)
 
 # Static loader => single self-contained exe, no WebView2Loader.dll to ship.
-target_link_libraries(WhatsAppPrivacy PRIVATE
+target_link_libraries(PrivacyGlass PRIVATE
   ${webview2_SOURCE_DIR}/build/native/x64/WebView2LoaderStatic.lib
   version shlwapi comctl32)
 
-target_compile_definitions(WhatsAppPrivacy PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_compile_definitions(PrivacyGlass PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
 
 # We supply our own manifest via the .rc; stop the linker adding a second one.
-target_link_options(WhatsAppPrivacy PRIVATE /MANIFEST:NO)
+target_link_options(PrivacyGlass PRIVATE /MANIFEST:NO)
 
 # Sources are UTF-8. Without this MSVC reads them as ANSI and any non-ASCII
 # literal becomes mojibake ("About..." rendering as "Aboutâ€¦").
-target_compile_options(WhatsAppPrivacy PRIVATE /utf-8)
+target_compile_options(PrivacyGlass PRIVATE /utf-8)

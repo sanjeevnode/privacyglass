@@ -1,4 +1,4 @@
-# WhatsApp Privacy
+# PrivacyGlass
 
 A native Windows app that runs WhatsApp Web with names, messages, photos and
 previews **blurred by default** — so you can keep WhatsApp open on a shared or
@@ -10,15 +10,15 @@ after it renders — WhatsApp's own network and encryption are untouched.
 
 ## Install
 
-1. Download `WhatsAppPrivacy-<version>-Setup.exe` from
-   [the latest release](https://github.com/sanjeevnode/win-whatsapp-privacy/releases/latest).
+1. Download `PrivacyGlass-<version>-Setup.exe` from
+   [the latest release](https://github.com/sanjeevnode/privacyglass/releases/latest).
 2. Run it. No admin rights needed — it installs for your user only.
-3. Launch **WhatsApp Privacy** from the Start menu and scan the QR code once.
+3. Launch **PrivacyGlass** from the Start menu and scan the QR code once.
 
 Windows SmartScreen may warn on first run because the installer is unsigned:
 **More info → Run anyway**.
 
-To uninstall: **Settings → Apps → Installed apps → WhatsApp Privacy → Uninstall**
+To uninstall: **Settings → Apps → Installed apps → PrivacyGlass → Uninstall**
 (or Control Panel → Programs and Features). This also deletes the stored
 WhatsApp session.
 
@@ -64,7 +64,7 @@ is the only file that needs editing when this happens.
 .\build.ps1
 ```
 
-Output: `build\Release\WhatsAppPrivacy.exe`
+Output: `build\Release\PrivacyGlass.exe`
 
 `cmake` and `nuget` are not required on PATH — the script uses the CMake bundled with
 Visual Studio 2022, and CMake fetches the WebView2 SDK (a NuGet `.nupkg` is just a zip)
@@ -80,7 +80,7 @@ Microsoft Edge WebView2 Evergreen Runtime (preinstalled on current Windows 11).
 The engine has a headless self-check (26 assertions, no login or network needed):
 
 ```powershell
-.\build\Release\WhatsAppPrivacy.exe --selfcheck   # exit 0 = pass
+.\build\Release\PrivacyGlass.exe --selfcheck   # exit 0 = pass
 ```
 
 Results are written to `build\Release\selfcheck.txt`. `build.ps1` and CI both
@@ -100,7 +100,7 @@ Not done yet: settings do not persist across restarts (privacy always starts
 ON with all categories enabled), and there is no tray icon, autostart, or
 theme matching.
 
-The WhatsApp session lives in `%LOCALAPPDATA%\WhatsAppPrivacy\WebView2` and
+The WhatsApp session lives in `%LOCALAPPDATA%\PrivacyGlass\WebView2` and
 persists like a normal browser profile. Delete that folder to log out.
 
 ## Releases
@@ -115,3 +115,24 @@ uninstalled so no chat data is left behind.
 WhatsApp ships obfuscated class names that change without notice. When blurring
 breaks, [web/selectors.js](web/selectors.js) is the only file to edit — the CSS
 keys off our own `wap-t-*` classes, never WhatsApp's.
+
+## Disclaimer
+
+PrivacyGlass is an independent project. It is **not affiliated with, endorsed
+by, sponsored by, or connected to WhatsApp LLC or Meta Platforms, Inc.**
+"WhatsApp" is a trademark of WhatsApp LLC; it is used here only to describe what
+this tool works with.
+
+PrivacyGlass does not modify, intercept, or interfere with WhatsApp's service.
+It loads `web.whatsapp.com` in a standard browser engine (Microsoft Edge
+WebView2) and applies a CSS blur to content already rendered on your own screen,
+showing your own account's data on your own machine. No traffic is intercepted
+or decrypted, no protocol is reimplemented, nothing is scraped or sent anywhere,
+and no message content is ever written to disk or logged.
+
+Your use of WhatsApp Web remains subject to WhatsApp's own Terms of Service.
+Provided as-is, without warranty of any kind.
+
+## Licence
+
+[MIT](LICENSE)

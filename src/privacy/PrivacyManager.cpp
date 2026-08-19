@@ -38,6 +38,7 @@ bool PrivacyManager::GetCategory(const char* key) const {
 
 void PrivacyManager::Publish() const {
     if (sink_) sink_(state_);
+    if (onChange_) onChange_(state_);
 }
 
 std::wstring PrivacyManager::ToJson() const {

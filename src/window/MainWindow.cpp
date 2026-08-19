@@ -1,5 +1,6 @@
 #include "window/MainWindow.h"
 #include "webview/WebViewManager.h"
+#include "settings/Settings.h"
 
 #include <windowsx.h>    // GET_X_LPARAM / GET_Y_LPARAM
 #include <commctrl.h>    // TaskDialogIndirect
@@ -7,8 +8,8 @@
 #include <vector>
 
 namespace {
-constexpr wchar_t kClassName[] = L"WhatsAppPrivacyWindow";
-constexpr wchar_t kTitle[]     = L"WhatsApp Privacy";
+constexpr wchar_t kClassName[] = L"PrivacyGlassWindow";
+constexpr wchar_t kTitle[]     = L"PrivacyGlass";
 constexpr int     kHotkeyId    = 1;   // Ctrl+Shift+P
 constexpr int     kProbeHotkeyId = 3; // Ctrl+Shift+D -- dump selector diagnostics
 constexpr UINT_PTR kSelfCheckTimeoutId = 2;
@@ -22,7 +23,7 @@ constexpr int kIdFirstCategory = 0x0020;   // 0x20,0x30,0x40,0x50
 constexpr int kIdHover         = 0x0060;
 constexpr int kIdAbout         = 0x0070;
 
-constexpr wchar_t kRepoUrl[] = L"https://github.com/sanjeevnode/win-whatsapp-privacy";
+constexpr wchar_t kRepoUrl[] = L"https://github.com/sanjeevnode/privacyglass";
 
 struct Category { const char* key; const wchar_t* label; };
 constexpr Category kCategories[4] = {
@@ -117,6 +118,8 @@ void MainWindow::ShowAbout() {
         L"Hover over anything blurred to peek at it.\n\n"
         L"Everything runs locally: no server, no accounts, and chat content is "
         L"never written to disk or logged.\n\n"
+        L"Not affiliated with or endorsed by WhatsApp or Meta. WhatsApp is a "
+        L"trademark of WhatsApp LLC.\n\n"
         // ASCII only: this file is UTF-8 but MSVC reads sources as ANSI unless
         // told otherwise, so non-ASCII literals arrive as mojibake.
         L"<A HREF=\"https://sanjeevnode.in\">sanjeevnode.in</A>"
@@ -129,8 +132,8 @@ void MainWindow::ShowAbout() {
     cfg.hMainIcon            = static_cast<HICON>(LoadImageW(GetModuleHandleW(nullptr),
                                    MAKEINTRESOURCEW(1), IMAGE_ICON, 48, 48, LR_SHARED));
     cfg.dwCommonButtons      = TDCBF_CLOSE_BUTTON;
-    cfg.pszWindowTitle       = L"About WhatsApp Privacy";
-    cfg.pszMainInstruction   = L"WhatsApp Privacy";
+    cfg.pszWindowTitle       = L"About PrivacyGlass";
+    cfg.pszMainInstruction   = L"PrivacyGlass";
     cfg.pszContent           = body.c_str();
     cfg.pszFooter            = version.c_str();
     // Hyperlinks are inert unless the app opens them itself.
@@ -144,9 +147,9 @@ void MainWindow::ShowAbout() {
     if (FAILED(TaskDialogIndirect(&cfg, nullptr, nullptr, nullptr))) {
         // TaskDialog needs a comctl32 v6 manifest; fall back if it is missing.
         MessageBoxW(hwnd_,
-            (L"WhatsApp Privacy " + AppVersion() +
+            (L"PrivacyGlass " + AppVersion() +
              L"\n\nhttps://sanjeevnode.in\n" + kRepoUrl).c_str(),
-            L"About WhatsApp Privacy", MB_OK | MB_ICONINFORMATION);
+            L"About PrivacyGlass", MB_OK | MB_ICONINFORMATION);
     }
 }
 
@@ -243,7 +246,15 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
 LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_CREATE:
-        if (!selfCheck_) CreateToolbar();
+        // Restore saved preferences before the WebView exists, so the very first
+        // state pushed to the page is the user's, not the defaults.
+        // Skipped under --selfcheck: a test run must not read or write the real
+        // settings file.
+        if (!selfCheck_) {
+            privacy_.Set(Settings::Load());
+            privacy_.SetOnChange([](const PrivacyManager::State& s) { Settings::Save(s); });
+            CreateToolbar();
+        }
         webview_ = std::make_unique<WebViewManager>(hwnd_, &privacy_);
         webview_->SetSelfCheck(selfCheck_);
         // No toolbar any more: the WebView owns the entire client area.

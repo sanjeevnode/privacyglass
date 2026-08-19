@@ -19,12 +19,12 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            VALUE "CompanyName",      "WhatsApp Privacy"
-            VALUE "FileDescription",  "WhatsApp Privacy"
+            VALUE "CompanyName",      "PrivacyGlass"
+            VALUE "FileDescription",  "PrivacyGlass"
             VALUE "FileVersion",      "@APP_VERSION_FULL@.0"
-            VALUE "InternalName",     "WhatsAppPrivacy"
-            VALUE "OriginalFilename", "WhatsAppPrivacy.exe"
-            VALUE "ProductName",      "WhatsApp Privacy"
+            VALUE "InternalName",     "PrivacyGlass"
+            VALUE "OriginalFilename", "PrivacyGlass.exe"
+            VALUE "ProductName",      "PrivacyGlass"
             VALUE "ProductVersion",   "@APP_VERSION_FULL@.0"
         END
     END

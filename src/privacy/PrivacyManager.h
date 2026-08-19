@@ -20,6 +20,10 @@ public:
 
     void SetSink(Sink sink);
 
+    // Second observer, independent of the WebView sink: persistence needs to see
+    // every change too, and a single sink would mean one overwriting the other.
+    void SetOnChange(Sink onChange) { onChange_ = std::move(onChange); }
+
     const State& Get() const { return state_; }
     void Set(const State& s);
     void Toggle();                         // master on/off
@@ -35,4 +39,5 @@ private:
 
     State state_;
     Sink  sink_;
+    Sink  onChange_;
 };
