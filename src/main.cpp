@@ -1,5 +1,6 @@
 #include "app/Application.h"
 #include "settings/Settings.h"
+#include "update/Updater.h"
 #include "AppIdentity.h"
 
 #include <windows.h>
@@ -43,6 +44,26 @@ bool ActivateExistingInstance() {
     return true;
 }
 
+// Version ordering is easy to get subtly wrong (a string compare ranks 0.1.10
+// below 0.1.9), and a wrong answer here either hides updates forever or offers
+// a downgrade as an upgrade.
+bool VersionCompareOk() {
+    struct { const wchar_t* a; const wchar_t* b; bool newer; } cases[] = {
+        { L"0.1.10", L"0.1.9",  true  },   // the string-compare trap
+        { L"0.1.9",  L"0.1.10", false },
+        { L"0.2.0",  L"0.1.99", true  },
+        { L"1.0.0",  L"0.9.9",  true  },
+        { L"0.1.5",  L"0.1.5",  false },   // equal is not newer
+        { L"0.1.4",  L"0.1.5",  false },
+        { L"0.1.6",  L"0.1.5",  true  },
+        { L"v0.1.6", L"0.1.5",  true  },   // stray prefix must not break parsing
+        { L"0.2",    L"0.1.9",  true  },   // short form
+    };
+    for (const auto& c : cases)
+        if (Updater::IsNewerVersion(c.a, c.b) != c.newer) return false;
+    return true;
+}
+
 }  // namespace
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int showCmd) {
@@ -56,6 +77,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int showCmd) {
 
     if (selfCheck && !SettingsRoundTripOk())
         return 3;   // distinct from the JS self-check's 1/2
+    if (selfCheck && !VersionCompareOk())
+        return 4;
 
     // Single instance -- but not for --selfcheck, which must be able to run
     // while a normal instance is open (CI and build.ps1 depend on that).

@@ -1,6 +1,7 @@
 #include "window/MainWindow.h"
 #include "webview/WebViewManager.h"
 #include "settings/Settings.h"
+#include "update/Updater.h"
 #include "AppIdentity.h"
 
 #include <windowsx.h>    // GET_X_LPARAM / GET_Y_LPARAM
@@ -24,8 +25,9 @@ constexpr int kIdMaster        = 0x0010;
 constexpr int kIdFirstCategory = 0x0020;   // 0x20,0x30,0x40,0x50
 constexpr int kIdHover         = 0x0060;
 constexpr int kIdAbout         = 0x0070;
+constexpr int kIdUpdate        = 0x0080;
 
-constexpr wchar_t kRepoUrl[] = L"https://github.com/sanjeevnode/privacyglass";
+constexpr const wchar_t* kRepoUrl = kRepoUrlW;   // shared; see AppIdentity.h
 
 struct Category { const char* key; const wchar_t* label; };
 constexpr Category kCategories[4] = {
@@ -56,6 +58,7 @@ void MainWindow::CreateToolbar() {
     AppendMenuW(sys, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(sys, MF_STRING, kIdHover, L"Hover to reveal");
     AppendMenuW(sys, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(sys, MF_STRING, kIdUpdate, L"Check for updates...");
     AppendMenuW(sys, MF_STRING, kIdAbout, L"About...");
 
     SyncSystemMenu();
@@ -109,6 +112,51 @@ static std::wstring AppVersion() {
                HIWORD(fi->dwFileVersionMS), LOWORD(fi->dwFileVersionMS),
                HIWORD(fi->dwFileVersionLS));
     return out;
+}
+
+// Manual check only -- nothing is downloaded or executed without a yes.
+void MainWindow::CheckForUpdates() {
+    // The request runs on the UI thread and can take a few seconds; at least
+    // show that something is happening.
+    HCURSOR prev = SetCursor(LoadCursorW(nullptr, IDC_WAIT));
+    const Updater::Release rel = Updater::Check();
+    SetCursor(prev);
+
+    if (!rel.available) {
+        MessageBoxW(hwnd_,
+            L"You are running the latest version.\n\n"
+            L"(If you are offline, or GitHub could not be reached, this message "
+            L"also appears -- it never reports a false update.)",
+            L"PrivacyGlass", MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+
+    const std::wstring msg =
+        L"Version " + rel.version + L" is available.\n\n"
+        L"Download and run the installer now?\n\n"
+        L"PrivacyGlass will close so the installer can replace it. Your settings "
+        L"and WhatsApp login are kept.";
+
+    if (MessageBoxW(hwnd_, msg.c_str(), L"Update available",
+                    MB_YESNO | MB_ICONQUESTION) != IDYES)
+        return;
+
+    HCURSOR busy = SetCursor(LoadCursorW(nullptr, IDC_WAIT));
+    const bool ok = Updater::DownloadAndRun(hwnd_, rel);
+    SetCursor(busy);
+
+    if (ok) {
+        DestroyWindow(hwnd_);   // let the installer overwrite this exe
+    } else {
+        // Downloading failed; offer the release page rather than a dead end.
+        if (MessageBoxW(hwnd_,
+                L"The download failed.\n\nOpen the release page in your browser?",
+                L"PrivacyGlass", MB_YESNO | MB_ICONWARNING) == IDYES) {
+            ShellExecuteW(hwnd_, L"open",
+                          rel.pageUrl.empty() ? kRepoUrl : rel.pageUrl.c_str(),
+                          nullptr, nullptr, SW_SHOWNORMAL);
+        }
+    }
 }
 
 void MainWindow::ShowAbout() {
@@ -290,7 +338,8 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
             }
         }
         if (wp == kIdHover) { privacy_.ToggleCategory("hoverReveal"); return 0; }
-        if (wp == kIdAbout) { ShowAbout(); return 0; }
+        if (wp == kIdAbout)  { ShowAbout(); return 0; }
+        if (wp == kIdUpdate) { CheckForUpdates(); return 0; }
         break;
 
     case WM_INITMENUPOPUP:

@@ -51,6 +51,7 @@ add_executable(PrivacyGlass WIN32
   src/webview/WebViewManager.cpp
   src/privacy/PrivacyManager.cpp
   src/settings/Settings.cpp
+  src/update/Updater.cpp
   ${WEB_ASSETS_HEADER}
 )
 
@@ -62,7 +63,7 @@ target_include_directories(PrivacyGlass PRIVATE
 # Static loader => single self-contained exe, no WebView2Loader.dll to ship.
 target_link_libraries(PrivacyGlass PRIVATE
   ${webview2_SOURCE_DIR}/build/native/x64/WebView2LoaderStatic.lib
-  version shlwapi comctl32)
+  version shlwapi comctl32 winhttp)
 
 target_compile_definitions(PrivacyGlass PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
 

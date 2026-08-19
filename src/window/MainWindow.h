@@ -23,6 +23,7 @@ private:
     void    CreateToolbar();        // appends privacy items to the window menu
     void    SyncSystemMenu();       // refresh those items' check marks
     void    ShowAbout();
+    void    CheckForUpdates();
     void    LayoutChildren();
 
     HWND hwnd_ = nullptr;

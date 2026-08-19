@@ -19,3 +19,12 @@ inline constexpr wchar_t kSingleInstanceMutex[] =
 
 inline constexpr wchar_t kWindowClassName[] =
     L"PrivacyGlassWindow.{C7F1B9A4-3E62-4D80-9A15-6B2D8E4F70C3}";
+
+// Where the updater looks for releases. Token-pasted into a WinHTTP path, so it
+// is a macro rather than a constant.
+#define kRepoSlugW L"sanjeevnode/privacyglass"
+
+inline constexpr wchar_t kRepoUrlW[] = L"https://github.com/" kRepoSlugW;
+
+// GitHub's API rejects requests without a User-Agent.
+inline constexpr wchar_t kUserAgent[] = L"PrivacyGlass-Updater";
