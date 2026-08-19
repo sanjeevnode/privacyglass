@@ -27,7 +27,10 @@ WhatsApp session.
 Everything lives in the **window menu**: right-click the title bar, or press
 **Alt+Space**.
 
-![The window menu, with chat content blurred behind it](docs/images/menu.png)
+![The window menu open over a blurred chat list. Messages is unchecked while the other categories stay on.](docs/images/menu.png)
+
+*Above: names, photos and previews blurred, with Messages toggled off — the four
+categories work independently.*
 
 | Item | What it does |
 |---|---|
