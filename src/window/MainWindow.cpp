@@ -112,6 +112,9 @@ void MainWindow::ShowAbout() {
     const std::wstring version = L"Version " + AppVersion();
     const std::wstring body =
         L"Blurs names, messages, photos and previews in WhatsApp Web.\n\n"
+        L"Ctrl+Shift+P toggles privacy instantly, from anywhere in the window.\n"
+        L"Right-click the title bar (or press Alt+Space) for per-category options.\n"
+        L"Hover over anything blurred to peek at it.\n\n"
         L"Everything runs locally: no server, no accounts, and chat content is "
         L"never written to disk or logged.\n\n"
         // ASCII only: this file is UTF-8 but MSVC reads sources as ANSI unless

@@ -1,9 +1,64 @@
-# WhatsApp Privacy (Windows POC)
+# WhatsApp Privacy
 
-Native Win32 app embedding WhatsApp Web via WebView2, with a local-only privacy layer
-that blurs names, messages, avatars, and previews. See [docs/plan.md](docs/plan.md).
+A native Windows app that runs WhatsApp Web with names, messages, photos and
+previews **blurred by default** — so you can keep WhatsApp open on a shared or
+projected screen without your chats being readable.
 
-## Build
+Everything runs locally. No server, no account, no telemetry; chat content is
+never written to disk or logged. The blur is a visual layer applied to the page
+after it renders — WhatsApp's own network and encryption are untouched.
+
+## Install
+
+1. Download `WhatsAppPrivacy-<version>-Setup.exe` from
+   [the latest release](https://github.com/sanjeevnode/win-whatsapp-privacy/releases/latest).
+2. Run it. No admin rights needed — it installs for your user only.
+3. Launch **WhatsApp Privacy** from the Start menu and scan the QR code once.
+
+Windows SmartScreen may warn on first run because the installer is unsigned:
+**More info → Run anyway**.
+
+To uninstall: **Settings → Apps → Installed apps → WhatsApp Privacy → Uninstall**
+(or Control Panel → Programs and Features). This also deletes the stored
+WhatsApp session.
+
+## How to use
+
+Everything lives in the **window menu**: right-click the title bar, or press
+**Alt+Space**.
+
+![The window menu, with chat content blurred behind it](docs/images/menu.png)
+
+| Item | What it does |
+|---|---|
+| **Privacy Mode** | Master on/off for all blurring. Also `Ctrl+Shift+P`. |
+| **Names** | Contact and group names, in the list and the chat header. |
+| **Messages** | Message text, link previews and document cards. |
+| **Photos** | Profile pictures and avatars. |
+| **Previews** | The last-message line under each chat in the list. |
+| **Hover to reveal** | Point at any blurred item to read it; it re-blurs when you move away. |
+| **About...** | Version and links. |
+
+**`Ctrl+Shift+P` is the one to remember** — it toggles everything instantly and
+works even when focus is inside the web view, so you can hide the screen without
+reaching for the menu.
+
+Privacy is **ON every launch**. It is applied before WhatsApp finishes rendering,
+so chats are never briefly visible at startup. The four categories are independent
+— for example, uncheck *Photos* alone to see who is messaging while keeping the
+text hidden.
+
+Your login persists like a normal browser, so you only scan the QR code once.
+
+### If something stops blurring
+
+WhatsApp changes its page structure without notice, which can make a category
+stop working. Press **`Ctrl+Shift+D`** to write `diagnostics.txt` next to the
+app — it lists how many elements each rule currently matches. A rule reporting
+`0` is the broken one. Fixes go in [web/selectors.js](web/selectors.js), which
+is the only file that needs editing when this happens.
+
+## Build from source
 
 ```powershell
 .\build.ps1
@@ -22,10 +77,7 @@ Microsoft Edge WebView2 Evergreen Runtime (preinstalled on current Windows 11).
 
 ## Testing
 
-`Ctrl+Shift+P` toggles privacy mode. Privacy is **ON at launch** — content is
-blurred before WhatsApp finishes rendering, so there is no flash of plaintext.
-
-The engine has a headless self-check (20 assertions, no login or network needed):
+The engine has a headless self-check (26 assertions, no login or network needed):
 
 ```powershell
 .\build\Release\WhatsAppPrivacy.exe --selfcheck   # exit 0 = pass
@@ -34,16 +86,19 @@ The engine has a headless self-check (20 assertions, no login or network needed)
 Results are written to `build\Release\selfcheck.txt`. `build.ps1` and CI both
 fail the build if it regresses.
 
+Note what this does *not* cover: it runs against a mock DOM, so it verifies the
+engine's logic, never that the selectors still match live WhatsApp. Use
+`Ctrl+Shift+D` for that.
+
 ## Status
 
-- [x] **Phase 1** — native window skeleton
-- [x] **Phase 2** — WebView2 + persistent session (QR login survives restart)
-- [x] **Phase 3** — JS injection pipeline + two-way bridge
-- [x] **Phase 4** — privacy engine (blur, MutationObserver, boot fail-safe)
-- [ ] Phase 5 — native controls (per-category checkboxes)
-- [x] **Phase 6** — global hotkey (`Ctrl+Shift+P`)
-- [ ] Phase 7 — settings persistence + hover reveal
-- [ ] Phase 8 — polish (tray, autostart, theme)
+Working: persistent login, privacy engine with per-category control, global
+hotkey, hover reveal, window-menu UI, About dialog, signed-in session caching,
+and CI that publishes an installer per push.
+
+Not done yet: settings do not persist across restarts (privacy always starts
+ON with all categories enabled), and there is no tray icon, autostart, or
+theme matching.
 
 The WhatsApp session lives in `%LOCALAPPDATA%\WhatsAppPrivacy\WebView2` and
 persists like a normal browser profile. Delete that folder to log out.
