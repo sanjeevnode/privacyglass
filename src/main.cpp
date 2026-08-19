@@ -1,5 +1,6 @@
 #include "app/Application.h"
 #include "settings/Settings.h"
+#include "AppIdentity.h"
 
 #include <windows.h>
 #include <shellapi.h>
@@ -33,8 +34,7 @@ bool SettingsRoundTripOk() {
 // work across desktops: SetForegroundWindow alone cannot pull a window off
 // another virtual desktop, it just flashes the taskbar button.
 bool ActivateExistingInstance() {
-    // Must match MainWindow's registered class name.
-    HWND existing = FindWindowW(L"PrivacyGlassWindow", nullptr);
+    HWND existing = FindWindowW(kWindowClassName, nullptr);
     if (!existing) return false;
 
     if (IsIconic(existing)) ShowWindow(existing, SW_RESTORE);
@@ -63,7 +63,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int showCmd) {
         // Named mutex, not FindWindow alone: two instances launched together
         // could both search before either has created its window. The mutex is
         // per-user (Local\) so it does not clash across fast-user-switching.
-        HANDLE lock = CreateMutexW(nullptr, FALSE, L"Local\\PrivacyGlass.SingleInstance");
+        HANDLE lock = CreateMutexW(nullptr, FALSE, kSingleInstanceMutex);
         if (lock && GetLastError() == ERROR_ALREADY_EXISTS) {
             // The window may not exist yet if the first instance is still
             // starting; give it a moment rather than silently doing nothing.

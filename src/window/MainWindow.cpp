@@ -1,6 +1,7 @@
 #include "window/MainWindow.h"
 #include "webview/WebViewManager.h"
 #include "settings/Settings.h"
+#include "AppIdentity.h"
 
 #include <windowsx.h>    // GET_X_LPARAM / GET_Y_LPARAM
 #include <commctrl.h>    // TaskDialogIndirect
@@ -8,7 +9,8 @@
 #include <vector>
 
 namespace {
-constexpr wchar_t kClassName[] = L"PrivacyGlassWindow";
+// Shared with main.cpp's single-instance lookup; see AppIdentity.h.
+constexpr const wchar_t* kClassName = kWindowClassName;
 constexpr wchar_t kTitle[]     = L"PrivacyGlass";
 constexpr int     kHotkeyId    = 1;   // Ctrl+Shift+P
 constexpr int     kProbeHotkeyId = 3; // Ctrl+Shift+D -- dump selector diagnostics
