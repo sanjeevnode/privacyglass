@@ -117,13 +117,11 @@ static std::wstring AppVersion() {
     return out;
 }
 
-// The badge is suppressed while Privacy Mode is on. A "3" on the taskbar does
-// not reveal who or what, but it does reveal that messages are waiting -- and
-// hiding exactly that is the point of this app. It reappears the moment privacy
-// is switched off.
+// The badge shows regardless of Privacy Mode. It carries only a number -- never
+// a name or message text -- so it stays useful on a shared screen without
+// exposing anything the blur is protecting.
 void MainWindow::RefreshBadge() {
-    if (privacy_.Get().on) badge_.Clear(hwnd_);
-    else                   badge_.Show(hwnd_, unread_);
+    badge_.Show(hwnd_, unread_);
 }
 
 // Manual check only -- nothing is downloaded or executed without a yes.
@@ -311,10 +309,7 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
         // settings file.
         if (!selfCheck_) {
             privacy_.Set(Settings::Load());
-            privacy_.SetOnChange([this](const PrivacyManager::State& s) {
-                Settings::Save(s);
-                RefreshBadge();   // badge follows Privacy Mode
-            });
+            privacy_.SetOnChange([](const PrivacyManager::State& s) { Settings::Save(s); });
             CreateToolbar();
         }
         webview_ = std::make_unique<WebViewManager>(hwnd_, &privacy_);
