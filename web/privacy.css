@@ -55,6 +55,19 @@ body.wap-privacy-on .wap-t-picture {
   transition: none;
 }
 
+/* A blurred element is re-rasterized whenever anything inside its bounds
+   changes, and WhatsApp's virtualized list recycles rows constantly while
+   scrolling -- that re-blur per frame is what reads as jitter.
+   `contain: paint` stops layout/paint changes inside a row from invalidating
+   anything outside it, so each blurred element re-rasterizes on its own instead
+   of dragging its neighbours along. */
+.wap-hide-names   .wap-t-name,
+.wap-hide-messages .wap-t-message,
+.wap-hide-previews .wap-t-preview,
+.wap-hide-pictures .wap-t-picture {
+  contain: paint;
+}
+
 /* ---------------------------------------------------------------------------
    HOVER REVEAL
    Peek at content without toggling privacy off. Re-blurs on mouse-leave.

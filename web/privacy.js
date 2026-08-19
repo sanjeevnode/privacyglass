@@ -186,8 +186,13 @@
       pending = false;
       retagAll();
     };
-    requestAnimationFrame(flush);
-    setTimeout(flush, 100);   // coalesce bursts; 100ms is imperceptible
+    // Deliberately NOT requestAnimationFrame: rAF runs inside the frame that is
+    // already rendering the scroll, so tagging competes with WhatsApp's own
+    // paint and shows up as jitter. requestIdleCallback yields until the frame
+    // is done; the timeout keeps the worst case bounded (and covers hidden
+    // windows, where neither rAF nor idle callbacks fire promptly).
+    if (window.requestIdleCallback) requestIdleCallback(flush, { timeout: 200 });
+    setTimeout(flush, 150);   // backstop: idle callbacks stall in hidden windows
   }
 
   function startObserver() {
