@@ -127,6 +127,20 @@ HRESULT WebViewManager::OnControllerReady(HRESULT result, ICoreWebView2Controlle
                 return S_OK;
             }).Get(), &navToken);
 
+    // WhatsApp keeps the unread count in the document title.
+    EventRegistrationToken titleToken{};
+    webview_->add_DocumentTitleChanged(
+        Callback<ICoreWebView2DocumentTitleChangedEventHandler>(
+            [this](ICoreWebView2* sender, IUnknown*) -> HRESULT {
+                if (!onTitle_) return S_OK;
+                LPWSTR title = nullptr;
+                if (SUCCEEDED(sender->get_DocumentTitle(&title)) && title) {
+                    onTitle_(title);
+                    CoTaskMemFree(title);
+                }
+                return S_OK;
+            }).Get(), &titleToken);
+
     // Native state changes -> page.
     if (privacy_) {
         privacy_->SetSink([this](const PrivacyManager::State&) {

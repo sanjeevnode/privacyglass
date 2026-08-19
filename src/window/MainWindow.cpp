@@ -117,6 +117,15 @@ static std::wstring AppVersion() {
     return out;
 }
 
+// The badge is suppressed while Privacy Mode is on. A "3" on the taskbar does
+// not reveal who or what, but it does reveal that messages are waiting -- and
+// hiding exactly that is the point of this app. It reappears the moment privacy
+// is switched off.
+void MainWindow::RefreshBadge() {
+    if (privacy_.Get().on) badge_.Clear(hwnd_);
+    else                   badge_.Show(hwnd_, unread_);
+}
+
 // Manual check only -- nothing is downloaded or executed without a yes.
 void MainWindow::CheckForUpdates() {
     // The request runs on the UI thread and can take a few seconds; at least
@@ -302,11 +311,20 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
         // settings file.
         if (!selfCheck_) {
             privacy_.Set(Settings::Load());
-            privacy_.SetOnChange([](const PrivacyManager::State& s) { Settings::Save(s); });
+            privacy_.SetOnChange([this](const PrivacyManager::State& s) {
+                Settings::Save(s);
+                RefreshBadge();   // badge follows Privacy Mode
+            });
             CreateToolbar();
         }
         webview_ = std::make_unique<WebViewManager>(hwnd_, &privacy_);
         webview_->SetSelfCheck(selfCheck_);
+        if (!selfCheck_) {
+            webview_->SetTitleHandler([this](const std::wstring& title) {
+                unread_ = ParseUnreadCount(title.c_str());
+                RefreshBadge();
+            });
+        }
         // No toolbar any more: the WebView owns the entire client area.
         webview_->SetTopInset(0);
         if (selfCheck_) {

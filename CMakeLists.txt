@@ -48,6 +48,7 @@ add_executable(PrivacyGlass WIN32
   src/main.cpp
   src/app/Application.cpp
   src/window/MainWindow.cpp
+  src/window/TaskbarBadge.cpp
   src/webview/WebViewManager.cpp
   src/privacy/PrivacyManager.cpp
   src/settings/Settings.cpp

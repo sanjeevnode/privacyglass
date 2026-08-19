@@ -1,6 +1,7 @@
 #include "app/Application.h"
 #include "settings/Settings.h"
 #include "update/Updater.h"
+#include "window/TaskbarBadge.h"
 #include "AppIdentity.h"
 
 #include <windows.h>
@@ -64,6 +65,26 @@ bool VersionCompareOk() {
     return true;
 }
 
+// The badge count is parsed from a title WhatsApp controls, so the parser has
+// to reject anything that is not a real count rather than show a wrong number.
+bool UnreadParseOk() {
+    struct { const wchar_t* title; int expect; } cases[] = {
+        { L"(3) WhatsApp",   3   },
+        { L"(12) WhatsApp",  12  },
+        { L"(99+) WhatsApp", 99  },   // WhatsApp's own cap notation
+        { L"WhatsApp",       0   },   // no unread
+        { L"",               0   },
+        { L"(x) WhatsApp",   0   },   // not digits
+        { L"(3 WhatsApp",    0   },   // unclosed, must not read as 3
+        { L"3) WhatsApp",    0   },   // no opening paren
+        { L"  (7) WhatsApp", 7   },   // leading space
+        { nullptr,           0   },   // null must not crash
+    };
+    for (const auto& c : cases)
+        if (ParseUnreadCount(c.title) != c.expect) return false;
+    return true;
+}
+
 }  // namespace
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int showCmd) {
@@ -79,6 +100,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int showCmd) {
         return 3;   // distinct from the JS self-check's 1/2
     if (selfCheck && !VersionCompareOk())
         return 4;
+    if (selfCheck && !UnreadParseOk())
+        return 5;
+    if (selfCheck && !UnreadParseOk())
+        return 5;
 
     // Single instance -- but not for --selfcheck, which must be able to run
     // while a normal instance is open (CI and build.ps1 depend on that).

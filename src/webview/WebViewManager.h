@@ -35,6 +35,12 @@ public:
         onMessage_ = std::move(h);
     }
 
+    // Fires when the page title changes. WhatsApp keeps the unread count there
+    // ("(3) WhatsApp"), which is where the taskbar badge gets its number.
+    void SetTitleHandler(std::function<void(const std::wstring&)> h) {
+        onTitle_ = std::move(h);
+    }
+
 private:
     HRESULT OnEnvironmentReady(HRESULT, ICoreWebView2Environment*);
     HRESULT OnControllerReady(HRESULT, ICoreWebView2Controller*);
@@ -48,4 +54,5 @@ private:
     Microsoft::WRL::ComPtr<ICoreWebView2Controller> controller_;
     Microsoft::WRL::ComPtr<ICoreWebView2> webview_;
     std::function<void(const std::wstring&)> onMessage_;
+    std::function<void(const std::wstring&)> onTitle_;
 };

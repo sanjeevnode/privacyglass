@@ -4,6 +4,7 @@
 #include <string>
 
 #include "privacy/PrivacyManager.h"
+#include "window/TaskbarBadge.h"
 
 class WebViewManager;
 
@@ -28,6 +29,9 @@ private:
 
     HWND hwnd_ = nullptr;
     bool selfCheck_ = false;
+    TaskbarBadge badge_;
+    int  unread_ = 0;               // last count parsed from the page title
+    void RefreshBadge();
     std::wstring selfCheckLog_;
     PrivacyManager privacy_;
     std::unique_ptr<WebViewManager> webview_;
