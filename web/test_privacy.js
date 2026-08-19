@@ -43,7 +43,16 @@
           <div class="message-in"><span class="selectable-text">secret text</span></div>
         </div>`;
 
-      window.__wapPrivacy.retagAll();
+      // retagAll() must not throw. It swallows per-selector errors internally,
+      // but an error in its own body (e.g. a TDZ ReferenceError) would silently
+      // disable ALL tagging -- which is exactly what happened once.
+      let retagThrew = null;
+      try { window.__wapPrivacy.retagAll(); } catch (e) { retagThrew = e.message; }
+      check('retagAll does not throw' + (retagThrew ? ': ' + retagThrew : ''), !retagThrew);
+
+      // And it must actually do work, not no-op.
+      const st = window.__wapStats && window.__wapStats();
+      check('retagAll ran a tagging pass', st && st.passes > 0);
 
       const name    = document.querySelector('#pane-side span[title]');
       const preview = document.querySelector('#pane-side span[dir="ltr"]');

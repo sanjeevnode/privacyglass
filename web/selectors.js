@@ -41,6 +41,15 @@ window.__wapSelectors = {
     // Whole bubble body, so captions/link previews inside it go too.
     '#main .message-in .copyable-text',
     '#main .message-out .copyable-text',
+    // Document cards ("app-debug.apk · 180 MB") and link previews ("Join meeting
+    // on Teams") are separate widgets inside the bubble, not .selectable-text,
+    // so the rules above miss them entirely.
+    '#main [role="row"] [data-testid="document-thumb"]',
+    '#main [role="row"] [data-testid="media-link"]',
+    '#main [role="row"] a[href]',
+    '#main [role="row"] [title$=".apk"], #main [role="row"] [title$=".pdf"]',
+    // Generic: any titled element inside a message row is user content.
+    '#main [role="row"] [title]',
   ],
 
   // Avatars / profile photos, list and header alike.

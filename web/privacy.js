@@ -68,6 +68,12 @@
   }
 
   // --- tagging --------------------------------------------------------------
+  // Cost of the tagging passes, readable via __wapStats(), so a slow session can
+  // be attributed to this engine or ruled out. Must be declared BEFORE
+  // tagWithin: a `const` referenced above its declaration throws a TDZ
+  // ReferenceError on every call, which silently kills all tagging.
+  const stats = { passes: 0, ms: 0 };
+
   // Mark elements with our own stable classes. WhatsApp's generated class names
   // live only in selectors.js; the CSS keys off wap-t-* exclusively.
   function tagWithin(root) {
@@ -106,10 +112,6 @@
 
     stats.ms += performance.now() - t0;
   }
-
-  // Instrumentation for `__wapStats()` -- cost of the tagging passes, so a slow
-  // session can be attributed to the privacy engine or ruled out.
-  const stats = { passes: 0, ms: 0, tagged: 0 };
 
   function retagAll() {
     if (!document.body) return;
