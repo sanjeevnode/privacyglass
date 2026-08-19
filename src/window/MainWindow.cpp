@@ -7,6 +7,7 @@ namespace {
 constexpr wchar_t kClassName[] = L"WhatsAppPrivacyWindow";
 constexpr wchar_t kTitle[]     = L"WhatsApp Privacy";
 constexpr int     kHotkeyId    = 1;   // Ctrl+Shift+P
+constexpr int     kProbeHotkeyId = 3; // Ctrl+Shift+D -- dump selector diagnostics
 constexpr UINT_PTR kSelfCheckTimeoutId = 2;
 
 
@@ -185,6 +186,7 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
         // Global toggle; works regardless of which control has focus, including
         // when the WebView2 child window owns it.
         RegisterHotKey(hwnd_, kHotkeyId, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, 'P');
+        RegisterHotKey(hwnd_, kProbeHotkeyId, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, 'D');
         return 0;
 
     // Right-click on the title bar (and Alt+Space) opens the window menu; the
@@ -210,6 +212,8 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
         if (wp == kHotkeyId) {
             privacy_.Toggle();   // sink pushes it to the page
             SyncSystemMenu();    // hotkey and menu share one source of truth
+        } else if (wp == kProbeHotkeyId && webview_) {
+            webview_->DumpDiagnostics();
         }
         return 0;
 

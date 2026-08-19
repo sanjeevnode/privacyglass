@@ -1,97 +1,65 @@
 // WhatsApp Web DOM selectors -- THE ONLY FILE THAT SHOULD NEED EDITING WHEN
 // WHATSAPP CHANGES ITS DOM.
 //
-// WhatsApp ships obfuscated, generated class names (`.x1n2onr6`, `._ak8j`) that
-// churn without notice. Everything here prefers, in order:
-//   1. ARIA roles / semantic attributes  -- WhatsApp needs these for a11y, so they
-//      are the most stable thing on the page.
-//   2. data-* attributes                 -- semi-stable, survive most restyles.
-//   3. Generated class names              -- last resort, expect breakage.
+// Verified against the live DOM with Ctrl+Shift+D (writes diagnostics.txt with
+// a match count for every selector below). A selector reporting n:0 is dead --
+// check it there before trusting it.
 //
-// STRATEGY: enumerating every text node is a losing game -- one missed span is a
-// leaked phone number. Instead each category blurs a CONTAINER and `exempt`
-// lists the UI chrome that must stay readable inside it. Missing a selector then
-// over-blurs (safe) instead of leaking (not safe).
+// Findings that shaped this file:
+//   * The chat list uses [role="gridcell"], NOT [role="listitem"]. Every
+//     listitem-based rule matched nothing.
+//   * Avatars are <img src="https://pps.whatsapp.net/...">, not blob: URLs.
+//   * Message bubbles use neither .message-in/.message-out nor .selectable-text
+//     in the current build; .copyable-text is also absent.
 
 window.__wapSelectors = {
   // Contact/group display names: chat list rows and the open chat's header.
   names: [
-    '#pane-side [role="listitem"] span[title]',
-    '#pane-side [role="gridcell"] span[title]',
+    '#pane-side [role="gridcell"] span[title]',   // verified: 133 matches
+    'span[title][dir="auto"]',                    // verified: 67 matches
     '#main header span[title]',
-    '#main header [role="button"] span[dir="auto"]',
-    // Group-message sender labels ("+91 91710 89361" above a bubble).
-    // Must match ONLY the label, never the bubble body: [data-pre-plain-text]
-    // and a bare span[dir="auto"] both match the whole message wrapper, and a
-    // blurred wrapper keeps the text blurred even when Messages is unchecked.
-    '#main .message-in [data-testid="author"]',
-    '#main [role="row"] span[aria-label]:not(.selectable-text)',
-    '#main .message-in > div > div > span[dir="auto"]:not(.selectable-text)',
-    // Contact-info / drawer panel name.
-    '[data-testid="drawer-right"] span[title]',
-    'span[title][dir="auto"]',
+    '#main header span[dir="auto"]',
   ],
 
-  // Message bubble text in the open conversation.
+  // Message bubble text in the open conversation. WhatsApp's class names here
+  // are generated and unstable, so key off structure and the copy attributes
+  // that survive restyles.
   messages: [
-    '#main .message-in .selectable-text',
-    '#main .message-out .selectable-text',
-    '#main div.copyable-text span.selectable-text',
-    '#main [data-testid="quoted-message"]',
-    // Whole bubble body, so captions/link previews inside it go too.
-    '#main .message-in .copyable-text',
-    '#main .message-out .copyable-text',
-    // Document cards ("app-debug.apk · 180 MB") and link previews ("Join meeting
-    // on Teams") are separate widgets inside the bubble, not .selectable-text,
-    // so the rules above miss them entirely.
-    '#main [role="row"] [data-testid="document-thumb"]',
-    '#main [role="row"] [data-testid="media-link"]',
+    '#main [data-pre-plain-text]',
+    '#main .selectable-text',
+    '#main .copyable-text',
+    '#main [role="row"] span[dir="ltr"]',
+    '#main [role="row"] span[dir="auto"]',
+    // Document cards and link previews are separate widgets inside the bubble.
     '#main [role="row"] a[href]',
-    '#main [role="row"] [title$=".apk"], #main [role="row"] [title$=".pdf"]',
-    // Generic: any titled element inside a message row is user content.
     '#main [role="row"] [title]',
   ],
 
-  // Avatars / profile photos, list and header alike.
+  // Avatars / profile photos.
   pictures: [
+    'img[src*="pps.whatsapp.net"]',               // verified: 40 matches
+    'img[src*="cdn.whatsapp.net"]',
     'img[src^="blob:"]',
-    'img[src*="/pps/"]',
-    'img[src*="mmg.whatsapp.net"]',
-    'img[src*="pps.whatsapp.net"]',
-    '#pane-side [role="listitem"] img',
+    '#pane-side [role="gridcell"] img',
     '#main header img',
-    // Fallback silhouettes rendered as inline SVG when there is no photo --
-    // these are what leaked as coloured circles in testing.
-    '#pane-side [role="listitem"] [data-icon="default-user"]',
-    '#pane-side [role="listitem"] [data-icon="default-group"]',
-    '#main header [data-icon="default-user"]',
-    '#main header [data-icon="default-group"]',
-    '[data-testid="default-user"]',
-    '[data-testid="default-group"]',
-    '[data-testid="avatar"]',
+    // Fallback silhouettes when a contact has no photo.
+    '[data-icon="default-user"]',
+    '[data-icon="default-group"]',
+    '[data-icon="default-user-wrapped"]',
   ],
 
   // Chat-list secondary line (last-message preview) and in-chat media.
   previews: [
-    // The preview text row only -- NOT the whole gridcell, because an ancestor's
-    // blur also rasterizes the timestamp and unread badge and cannot be undone
-    // on the child.
     // Innermost text spans only. A bare span[dir="auto"] also matches the row
-    // wrapper, and blurring that ancestor drags the avatar down with it -- which
-    // makes the Photos checkbox look broken.
-    '#pane-side [role="listitem"] [role="gridcell"] span[dir="ltr"]',
-    '#pane-side [role="listitem"] span[dir="ltr"]:not(:has(img))',
-    '#pane-side [role="listitem"] span[dir="auto"]:not([title]):not(:has(img))',
-    '#main [data-testid="media-content"]',
-    '#main .message-in img, #main .message-out img',
+    // wrapper, and blurring that ancestor drags the avatar down with it.
+    '#pane-side [role="gridcell"] span[dir="ltr"]',
+    '#pane-side [role="gridcell"] span[dir="auto"]:not([title])',
+    '#main [role="row"] img',
   ],
 };
 
 // Elements that must NEVER be blurred, even when inside a blurred container.
-// Without these the container strategy above would blur the timestamps and
-// unread badges that make the list usable.
 window.__wapExempt = [
-  '#pane-side [role="listitem"] [role="gridcell"] > div:last-child',  // time + badge column
   '[data-icon="muted"]',
   '[data-icon="pinned"]',
   '[data-icon="status-dblcheck"]',

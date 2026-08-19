@@ -32,10 +32,12 @@
 
       document.body.innerHTML = `
         <div id="pane-side">
-          <div role="listitem">
-            <span title="Alice">Alice</span>
-            <div role="gridcell"><span dir="ltr">see you at 6</span></div>
-            <img src="blob:fake-avatar">
+          <div role="row">
+            <div role="gridcell">
+              <span title="Alice">Alice</span>
+              <span dir="ltr">see you at 6</span>
+              <img src="https://pps.whatsapp.net/v/fake-avatar">
+            </div>
           </div>
         </div>
         <div id="main">

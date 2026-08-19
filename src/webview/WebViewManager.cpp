@@ -173,6 +173,50 @@ void WebViewManager::PostJson(const std::wstring& json) {
     if (webview_) webview_->PostWebMessageAsString(json.c_str());
 }
 
+// Runs the page-side probes and writes the result to diagnostics.txt beside the
+// exe, so selectors can be fixed against the real DOM rather than guessed at.
+void WebViewManager::DumpDiagnostics() {
+    if (!webview_) return;
+
+    webview_->ExecuteScript(
+        L"JSON.stringify({stats:window.__wapStats&&__wapStats(),"
+        L"imgs:window.__wapProbe&&__wapProbe(),"
+        L"counts:window.__wapSelectorCounts&&__wapSelectorCounts()},null,1)",
+        Microsoft::WRL::Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
+            [](HRESULT, LPCWSTR json) -> HRESULT {
+                if (!json) return S_OK;
+                wchar_t path[MAX_PATH]{};
+                GetModuleFileNameW(nullptr, path, MAX_PATH);
+                std::wstring out(path);
+                out = out.substr(0, out.find_last_of(L'\\') + 1) + L"diagnostics.txt";
+
+                // ExecuteScript returns a JSON string literal; unescape it.
+                std::wstring s(json), text;
+                for (size_t i = 0; i < s.size(); ++i) {
+                    if (s[i] == L'\\' && i + 1 < s.size()) {
+                        if (s[i + 1] == L'n') { text += L"\r\n"; ++i; continue; }
+                        if (s[i + 1] == L'"') { text += L'"';    ++i; continue; }
+                        if (s[i + 1] == L'\\'){ text += L'\\';   ++i; continue; }
+                    }
+                    if (s[i] != L'"' || i != 0) text += s[i];
+                }
+
+                if (HANDLE f = CreateFileW(out.c_str(), GENERIC_WRITE, 0, nullptr,
+                                           CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+                    f != INVALID_HANDLE_VALUE) {
+                    int n = WideCharToMultiByte(CP_UTF8, 0, text.c_str(), -1,
+                                                nullptr, 0, nullptr, nullptr);
+                    std::string utf8(n > 0 ? n - 1 : 0, '\0');
+                    WideCharToMultiByte(CP_UTF8, 0, text.c_str(), -1,
+                                        utf8.data(), n, nullptr, nullptr);
+                    DWORD w = 0;
+                    WriteFile(f, utf8.data(), static_cast<DWORD>(utf8.size()), &w, nullptr);
+                    CloseHandle(f);
+                }
+                return S_OK;
+            }).Get());
+}
+
 void WebViewManager::Resize() {
     if (!controller_) return;
     RECT bounds{};

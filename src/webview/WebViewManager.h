@@ -24,6 +24,9 @@ public:
     // Pixels reserved at the top of the client area for the native toolbar.
     void SetTopInset(int px) { topInset_ = px; }
 
+    // Writes selector/perf diagnostics next to the exe (Ctrl+Shift+D).
+    void DumpDiagnostics();
+
     // Fire-and-forget JSON to the page. Safe before the webview exists (drops).
     void PostJson(const std::wstring& json);
 

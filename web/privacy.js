@@ -120,6 +120,35 @@
 
   window.__wapStats = () => ({ ...stats, avgMs: +(stats.ms / (stats.passes || 1)).toFixed(3) });
 
+  // Diagnostic: how many elements each individual selector matches, and how long
+  // it takes. A selector matching thousands of nodes is both a perf problem and
+  // usually a sign it is far too broad.
+  window.__wapSelectorCounts = () => {
+    const out = {};
+    const sel = SEL();
+    for (const cat of CATEGORIES) {
+      for (const s of (sel[cat] || [])) {
+        const t = performance.now();
+        let n = -1;
+        try { n = document.querySelectorAll(s).length; } catch (e) { n = -2; }
+        out[cat + ' | ' + s] = { n, ms: +(performance.now() - t).toFixed(2) };
+      }
+    }
+    return out;
+  };
+
+  // Diagnostic: describe every <img> on the page and whether we tagged it.
+  // Used to fix selectors against the real DOM instead of guessing.
+  window.__wapProbe = () => [...document.querySelectorAll('img')].slice(0, 25).map(el => ({
+    src: (el.getAttribute('src') || '').slice(0, 60),
+    cls: el.className && el.className.slice ? el.className.slice(0, 40) : '',
+    tagged: el.classList.contains('wap-t-picture'),
+    inPane: !!el.closest('#pane-side'),
+    listitem: !!el.closest('[role="listitem"]'),
+    parent: el.parentElement ? el.parentElement.tagName + '.' +
+            String(el.parentElement.className).slice(0, 30) : '',
+  }));
+
   // --- state application ----------------------------------------------------
   function apply() {
     const b = document.body;
@@ -143,49 +172,32 @@
   //
   // Only the subtrees the observer reported are re-tagged. Re-scanning the whole
   // document on every mutation is what made this pin the CPU on a busy chat.
+  // One pass per frame over the whole body, NOT one per changed node. WhatsApp
+  // emits thousands of mutations per second; per-node tagging ran ~2.4M passes
+  // in a single session. A single scoped sweep is both simpler and far cheaper,
+  // because the selectors are cheap (see __wapSelectorCounts) but the call
+  // overhead is not.
   let pending = false;
-  let dirty = [];
-  function scheduleRetag(roots) {
-    if (roots && roots.length) dirty.push(...roots);
-    else dirty = null;                     // null => full sweep
+  function scheduleRetag() {
     if (pending) return;
     pending = true;
     const flush = () => {
       if (!pending) return;
       pending = false;
-      const scope = dirty;
-      dirty = [];
-      if (!scope) return retagAll();
-      for (const el of scope)
-        if (el.isConnected) tagWithin(el);
+      retagAll();
     };
     requestAnimationFrame(flush);
-    setTimeout(flush, 32);
+    setTimeout(flush, 100);   // coalesce bursts; 100ms is imperceptible
   }
 
   function startObserver() {
     if (!document.body) return false;
-    new MutationObserver((records) => {
-      // Collect only the element subtrees that actually changed.
-      const roots = [];
-      for (const r of records) {
-        if (r.type === 'attributes') {
-          if (r.target.nodeType === 1) roots.push(r.target);
-          continue;
-        }
-        for (const n of r.addedNodes)
-          if (n.nodeType === 1) roots.push(n);
-        // A text-only change still needs its container re-checked.
-        if (!r.addedNodes.length && r.target.nodeType === 1) roots.push(r.target);
-      }
-      if (roots.length) scheduleRetag(roots);
-    }).observe(document.body, {
+    new MutationObserver(scheduleRetag).observe(document.body, {
       childList: true,
       subtree: true,
-      // Re-tag when an existing node is restyled/reused: the virtualized chat
-      // list swaps content into recycled rows without adding nodes.
-      attributes: true,
-      attributeFilter: ['class', 'src', 'title'],
+      // Deliberately NOT observing attributes: our own classList.add() mutations
+      // would retrigger the observer, and WhatsApp rewrites class attributes
+      // constantly. childList alone catches every new row and message.
     });
     return true;
   }
