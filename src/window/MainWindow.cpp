@@ -27,6 +27,7 @@ constexpr int kIdFirstCategory = 0x0020;   // 0x20,0x30,0x40,0x50
 constexpr int kIdHover         = 0x0060;
 constexpr int kIdAbout         = 0x0070;
 constexpr int kIdUpdate        = 0x0080;
+constexpr int kIdHotkey        = 0x0090;
 
 constexpr const wchar_t* kRepoUrl = kRepoUrlW;   // shared; see AppIdentity.h
 
@@ -56,16 +57,26 @@ void MainWindow::CreateToolbar() {
     // this menu entry, so deleting it greys out the X and leaves Alt+F4 as the
     // only way to quit.
     AppendMenuW(sys, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(sys, MF_STRING, kIdMaster, L"Privacy Mode\tCtrl+Shift+P");
+    // Label carries the live shortcut, so it stays correct after a change.
+    const std::wstring master = L"Privacy Mode\t" + Hotkey::Format(ToggleHotkey());
+    AppendMenuW(sys, MF_STRING, kIdMaster, master.c_str());
     for (int i = 0; i < 4; ++i)
         AppendMenuW(sys, MF_STRING, kIdFirstCategory + i * 16, kCategories[i].label);
     AppendMenuW(sys, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(sys, MF_STRING, kIdHover, L"Hover to reveal");
     AppendMenuW(sys, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(sys, MF_STRING, kIdHotkey, L"Change shortcut...");
     AppendMenuW(sys, MF_STRING, kIdUpdate, L"Check for updates...");
     AppendMenuW(sys, MF_STRING, kIdAbout, L"About...");
 
     SyncSystemMenu();
+}
+
+// Rebuilds the menu from scratch. Needed after a shortcut change, since the
+// Privacy Mode label carries the shortcut text.
+void MainWindow::RebuildSystemMenu() {
+    GetSystemMenu(hwnd_, TRUE);   // restore the stock menu
+    CreateToolbar();              // then re-append our items
 }
 
 // Check marks are set on demand (WM_INITMENUPOPUP) so they always match state.
@@ -91,6 +102,32 @@ void MainWindow::SyncSystemMenu() {
 
 void MainWindow::LayoutChildren() {
     if (webview_) webview_->Resize();
+}
+
+// Returns the configured toggle hotkey, falling back to the default when the
+// settings file has none (first run, or an older file).
+Hotkey::Combo MainWindow::ToggleHotkey() const {
+    const auto& s = privacy_.Get();
+    Hotkey::Combo c{ s.hotkeyMods, s.hotkeyVk };
+    return c.valid() ? c : Hotkey::Default();
+}
+
+// (Re)claims the global hotkeys. Returns false if the toggle combination is
+// already owned by another application -- RegisterHotKey is exclusive, so a
+// clash means the key silently does nothing until it is changed.
+bool MainWindow::RegisterHotkeys() {
+    UnregisterHotKey(hwnd_, kHotkeyId);
+    UnregisterHotKey(hwnd_, kProbeHotkeyId);
+
+    const Hotkey::Combo t = ToggleHotkey();
+    const BOOL ok = RegisterHotKey(hwnd_, kHotkeyId, t.mods | MOD_NOREPEAT, t.vk);
+
+    // Diagnostics key is fixed and secondary; a clash there is not worth
+    // reporting.
+    const Hotkey::Combo d = Hotkey::DefaultDiagnostics();
+    RegisterHotKey(hwnd_, kProbeHotkeyId, d.mods | MOD_NOREPEAT, d.vk);
+
+    return ok != FALSE;
 }
 
 // True when the user has chosen dark mode for apps. The key is absent on older
@@ -149,6 +186,173 @@ static std::wstring AppVersion() {
 // exposing anything the blur is protecting.
 void MainWindow::RefreshBadge() {
     badge_.Show(hwnd_, unread_);
+}
+
+namespace {
+
+// State passed through the dialog procedure.
+struct PromptData {
+    const wchar_t* body;
+    wchar_t*       buffer;
+    int            capacity;
+};
+
+constexpr int kPromptEdit  = 200;
+constexpr int kPromptLabel = 201;
+
+INT_PTR CALLBACK PromptProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
+    switch (msg) {
+    case WM_INITDIALOG: {
+        auto* d = reinterpret_cast<PromptData*>(lp);
+        SetWindowLongPtrW(dlg, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(d));
+        SetDlgItemTextW(dlg, kPromptLabel, d->body);
+        SetDlgItemTextW(dlg, kPromptEdit, d->buffer);
+        // Select the existing text so typing replaces it.
+        SendDlgItemMessageW(dlg, kPromptEdit, EM_SETSEL, 0, -1);
+        SetFocus(GetDlgItem(dlg, kPromptEdit));
+        return FALSE;   // focus set explicitly
+    }
+    case WM_COMMAND:
+        if (LOWORD(wp) == IDOK) {
+            auto* d = reinterpret_cast<PromptData*>(GetWindowLongPtrW(dlg, GWLP_USERDATA));
+            if (d) GetDlgItemTextW(dlg, kPromptEdit, d->buffer, d->capacity);
+            EndDialog(dlg, IDOK);
+            return TRUE;
+        }
+        if (LOWORD(wp) == IDCANCEL) { EndDialog(dlg, IDCANCEL); return TRUE; }
+        break;
+    }
+    return FALSE;
+}
+
+// Appends a control to an in-memory DLGTEMPLATE. Building the template by hand
+// avoids adding a .rc dialog resource for one prompt.
+void AddControl(std::vector<BYTE>& t, DWORD style, short x, short y,
+                short cx, short cy, WORD id, WORD cls, const wchar_t* text) {
+    while (t.size() % 4) t.push_back(0);          // DWORD-align each item
+
+    DLGITEMTEMPLATE item{};
+    item.style = style | WS_CHILD | WS_VISIBLE;
+    item.x = x; item.y = y; item.cx = cx; item.cy = cy;
+    item.id = id;
+    const auto* p = reinterpret_cast<const BYTE*>(&item);
+    t.insert(t.end(), p, p + sizeof(item));
+
+    const WORD marker = 0xFFFF;
+    const auto* m = reinterpret_cast<const BYTE*>(&marker);
+    t.insert(t.end(), m, m + 2);
+    const auto* c = reinterpret_cast<const BYTE*>(&cls);
+    t.insert(t.end(), c, c + 2);
+
+    const size_t bytes = (wcslen(text) + 1) * sizeof(wchar_t);
+    const auto* txt = reinterpret_cast<const BYTE*>(text);
+    t.insert(t.end(), txt, txt + bytes);
+
+    t.push_back(0); t.push_back(0);               // no creation data
+}
+
+}  // namespace
+
+bool MainWindow::PromptForText(const wchar_t* title, const wchar_t* body,
+                               wchar_t* buffer, int capacity) {
+    std::vector<BYTE> tmpl;
+
+    DLGTEMPLATE header{};
+    header.style = DS_MODALFRAME | DS_CENTER | DS_SETFONT | WS_POPUP |
+                   WS_CAPTION | WS_SYSMENU;
+    header.cdit = 5;
+    header.cx = 280; header.cy = 130;
+    const auto* h = reinterpret_cast<const BYTE*>(&header);
+    tmpl.insert(tmpl.end(), h, h + sizeof(header));
+
+    tmpl.push_back(0); tmpl.push_back(0);         // no menu
+    tmpl.push_back(0); tmpl.push_back(0);         // default class
+    const size_t titleBytes = (wcslen(title) + 1) * sizeof(wchar_t);
+    const auto* tb = reinterpret_cast<const BYTE*>(title);
+    tmpl.insert(tmpl.end(), tb, tb + titleBytes);
+
+    const WORD pt = 9;                            // DS_SETFONT: point size...
+    const auto* ptp = reinterpret_cast<const BYTE*>(&pt);
+    tmpl.insert(tmpl.end(), ptp, ptp + 2);
+    const wchar_t face[] = L"Segoe UI";           // ...then typeface
+    const auto* fp = reinterpret_cast<const BYTE*>(face);
+    tmpl.insert(tmpl.end(), fp, fp + sizeof(face));
+
+    constexpr WORD kStatic = 0x0082, kEdit = 0x0081, kButton = 0x0080;
+    AddControl(tmpl, SS_LEFT,                   10,  8, 260, 62, kPromptLabel, kStatic, L"");
+    AddControl(tmpl, WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL,
+                                                10, 76, 260, 14, kPromptEdit,  kEdit,   L"");
+    AddControl(tmpl, BS_DEFPUSHBUTTON | WS_TABSTOP, 150, 102, 55, 16, IDOK,     kButton, L"OK");
+    AddControl(tmpl, BS_PUSHBUTTON | WS_TABSTOP,    212, 102, 55, 16, IDCANCEL, kButton, L"Cancel");
+    AddControl(tmpl, SS_LEFT,                        10, 104,  0,  0, 202,      kStatic, L"");
+
+    PromptData data{ body, buffer, capacity };
+    const INT_PTR r = DialogBoxIndirectParamW(
+        GetModuleHandleW(nullptr),
+        reinterpret_cast<LPCDLGTEMPLATEW>(tmpl.data()),
+        hwnd_, PromptProc, reinterpret_cast<LPARAM>(&data));
+
+    return r == IDOK;
+}
+
+// Prompts for a new global shortcut and applies it.
+//
+// The combination is typed rather than captured by keypress: capturing would
+// need a dialog that intercepts every key, and the combination we most need to
+// change is one already stolen by another app -- which would never reach us.
+void MainWindow::ChangeHotkey() {
+    const Hotkey::Combo current = ToggleHotkey();
+
+    // TaskDialog cannot host an edit box, so use a small dialog built in code.
+    wchar_t buffer[128]{};
+    lstrcpynW(buffer, Hotkey::Format(current).c_str(), 128);
+
+    if (!PromptForText(L"Change shortcut",
+            L"Type a shortcut for toggling Privacy Mode.\n\n"
+            L"Examples:  Shift+Alt+W    Ctrl+Alt+P    Shift+Alt+F9\n\n"
+            L"It is claimed system-wide, so avoid combinations other apps use "
+            L"(Ctrl+Shift+P is VS Code's command palette, for instance).",
+            buffer, 128))
+        return;   // cancelled
+
+    const Hotkey::Combo next = Hotkey::Parse(buffer);
+    if (!next.valid()) {
+        MessageBoxW(hwnd_,
+            L"That does not look like a shortcut.\n\n"
+            L"Use at least one modifier (Ctrl, Shift, Alt or Win) plus a key, "
+            L"for example Shift+Alt+W.",
+            L"PrivacyGlass", MB_OK | MB_ICONWARNING);
+        return;
+    }
+
+    const Hotkey::Combo previous = current;
+    auto s = privacy_.Get();
+    s.hotkeyMods = next.mods;
+    s.hotkeyVk   = next.vk;
+    privacy_.Set(s);            // persists via the settings sink
+
+    if (!RegisterHotkeys()) {
+        // Another application already owns it; roll back rather than leave the
+        // user with a shortcut that silently does nothing.
+        auto revert = privacy_.Get();
+        revert.hotkeyMods = previous.mods;
+        revert.hotkeyVk   = previous.vk;
+        privacy_.Set(revert);
+        RegisterHotkeys();
+
+        MessageBoxW(hwnd_,
+            (L"Another application is already using " + Hotkey::Format(next) +
+             L".\n\nThe shortcut has been left as " + Hotkey::Format(previous) +
+             L".").c_str(),
+            L"PrivacyGlass", MB_OK | MB_ICONWARNING);
+        return;
+    }
+
+    // Rebuild the menu so the Privacy Mode row shows the new shortcut.
+    RebuildSystemMenu();
+    MessageBoxW(hwnd_,
+        (L"Shortcut changed to " + Hotkey::Format(next) + L".").c_str(),
+        L"PrivacyGlass", MB_OK | MB_ICONINFORMATION);
 }
 
 // Manual check only -- nothing is downloaded or executed without a yes.
@@ -373,8 +577,7 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
         webview_->Initialize();
         // Global toggle; works regardless of which control has focus, including
         // when the WebView2 child window owns it.
-        RegisterHotKey(hwnd_, kHotkeyId, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, 'P');
-        RegisterHotKey(hwnd_, kProbeHotkeyId, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, 'D');
+        RegisterHotkeys();
         return 0;
 
     // Right-click on the title bar (and Alt+Space) opens the window menu; the
@@ -392,6 +595,7 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
         if (wp == kIdHover) { privacy_.ToggleCategory("hoverReveal"); return 0; }
         if (wp == kIdAbout)  { ShowAbout(); return 0; }
         if (wp == kIdUpdate) { CheckForUpdates(); return 0; }
+        if (wp == kIdHotkey) { ChangeHotkey(); return 0; }
         break;
 
     case WM_INITMENUPOPUP:

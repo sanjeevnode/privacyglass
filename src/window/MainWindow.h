@@ -5,6 +5,7 @@
 
 #include "privacy/PrivacyManager.h"
 #include "window/TaskbarBadge.h"
+#include "settings/Hotkey.h"
 
 class WebViewManager;
 
@@ -24,6 +25,12 @@ private:
     void    CreateToolbar();        // appends privacy items to the window menu
     void    SyncSystemMenu();       // refresh those items' check marks
     void    ApplyTitleBarTheme();   // match the system light/dark setting
+    void    RebuildSystemMenu();    // after the shortcut text changes
+    Hotkey::Combo ToggleHotkey() const;
+    bool    RegisterHotkeys();      // false if the toggle combo is taken
+    void    ChangeHotkey();
+    bool    PromptForText(const wchar_t* title, const wchar_t* body,
+                          wchar_t* buffer, int capacity);
     void    ShowAbout();
     void    CheckForUpdates();
     void    LayoutChildren();

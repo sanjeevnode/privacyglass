@@ -2,6 +2,7 @@
 #include "settings/Settings.h"
 #include "update/Updater.h"
 #include "window/TaskbarBadge.h"
+#include "settings/Hotkey.h"
 #include "AppIdentity.h"
 
 #include <windows.h>
@@ -85,6 +86,29 @@ bool UnreadParseOk() {
     return true;
 }
 
+// Shortcut parsing takes free text from the user, so it has to reject the
+// malformed cases rather than register something unexpected system-wide.
+bool HotkeyParseOk() {
+    struct { const wchar_t* text; unsigned mods; unsigned vk; } cases[] = {
+        { L"Shift+Alt+W",  MOD_SHIFT | MOD_ALT,      'W'     },
+        { L"shift alt w",  MOD_SHIFT | MOD_ALT,      'W'     },   // spaces
+        { L"Ctrl+Alt+P",   MOD_CONTROL | MOD_ALT,    'P'     },
+        { L"ctrl+shift+f9", MOD_CONTROL | MOD_SHIFT, VK_F9   },
+        { L"Win+Alt+K",    MOD_WIN | MOD_ALT,        'K'     },
+        { L"W",            0, 0 },   // no modifier: would swallow a bare key
+        { L"Shift+Alt",    MOD_SHIFT | MOD_ALT, 0 },   // modifiers only
+        { L"",             0, 0 },
+    };
+    for (const auto& c : cases) {
+        const Hotkey::Combo got = Hotkey::Parse(c.text);
+        if (got.mods != c.mods || got.vk != c.vk) return false;
+    }
+    // Round-trip: formatting a combo must parse back to the same combo.
+    const Hotkey::Combo d = Hotkey::Default();
+    const Hotkey::Combo back = Hotkey::Parse(Hotkey::Format(d));
+    return back.mods == d.mods && back.vk == d.vk;
+}
+
 }  // namespace
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int showCmd) {
@@ -102,8 +126,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int showCmd) {
         return 4;
     if (selfCheck && !UnreadParseOk())
         return 5;
-    if (selfCheck && !UnreadParseOk())
-        return 5;
+    if (selfCheck && !HotkeyParseOk())
+        return 6;
 
     // Single instance -- but not for --selfcheck, which must be able to run
     // while a normal instance is open (CI and build.ps1 depend on that).

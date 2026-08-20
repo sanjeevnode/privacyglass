@@ -52,6 +52,7 @@ add_executable(PrivacyGlass WIN32
   src/webview/WebViewManager.cpp
   src/privacy/PrivacyManager.cpp
   src/settings/Settings.cpp
+  src/settings/Hotkey.cpp
   src/update/Updater.cpp
   ${WEB_ASSETS_HEADER}
 )

@@ -34,17 +34,25 @@ categories work independently.*
 
 | Item | What it does |
 |---|---|
-| **Privacy Mode** | Master on/off for all blurring. Also `Ctrl+Shift+P`. |
+| **Privacy Mode** | Master on/off for all blurring. Also `Shift+Alt+W`. |
 | **Names** | Contact and group names, in the list and the chat header. |
 | **Messages** | Message text, link previews and document cards. |
 | **Photos** | Profile pictures and avatars. |
 | **Previews** | The last-message line under each chat in the list. |
 | **Hover to reveal** | Point at any blurred item to read it; it re-blurs when you move away. |
+| **Change shortcut...** | Pick your own key combination for the toggle. |
 | **About...** | Version and links. |
 
-**`Ctrl+Shift+P` is the one to remember** — it toggles everything instantly and
+**`Shift+Alt+W` is the one to remember** — it toggles everything instantly and
 works even when focus is inside the web view, so you can hide the screen without
 reaching for the menu.
+
+The shortcut is claimed **system-wide**, which is what lets it work from any
+window — but it also means no other app can use that combination while
+PrivacyGlass is running. If it clashes with something you use, change it via
+**Change shortcut...** (type e.g. `Ctrl+Alt+P` or `Shift+Alt+F9`). If the
+combination you pick is already taken by another app, PrivacyGlass says so and
+keeps the previous one rather than leaving you with a dead key.
 
 Privacy is **ON every launch**. It is applied before WhatsApp finishes rendering,
 so chats are never briefly visible at startup. The four categories are independent
