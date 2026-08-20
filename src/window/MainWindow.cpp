@@ -14,8 +14,10 @@ namespace {
 // Shared with main.cpp's single-instance lookup; see AppIdentity.h.
 constexpr const wchar_t* kClassName = kWindowClassName;
 constexpr wchar_t kTitle[]     = L"PrivacyGlass";
-constexpr int     kHotkeyId    = 1;   // Ctrl+Shift+P
-constexpr int     kProbeHotkeyId = 3; // Ctrl+Shift+D -- dump selector diagnostics
+// Posted by the keyboard hook; handled on the message loop so the hook proc
+// itself returns immediately.
+constexpr UINT WM_APP_TOGGLE_PRIVACY    = WM_APP + 1;
+constexpr UINT WM_APP_DUMP_DIAGNOSTICS  = WM_APP + 2;
 constexpr UINT_PTR kSelfCheckTimeoutId = 2;
 
 
@@ -112,22 +114,63 @@ Hotkey::Combo MainWindow::ToggleHotkey() const {
     return c.valid() ? c : Hotkey::Default();
 }
 
-// (Re)claims the global hotkeys. Returns false if the toggle combination is
-// already owned by another application -- RegisterHotKey is exclusive, so a
-// clash means the key silently does nothing until it is changed.
+// The shortcut is deliberately NOT registered with RegisterHotKey.
+//
+// RegisterHotKey reserves a combination across the whole system: every other
+// application stops receiving it for as long as this app runs. That broke
+// editors and anything else with its own bindings (issue #2).
+//
+// Instead a WH_KEYBOARD hook on our own thread sees keys delivered to this
+// process, which includes the WebView2 child that would otherwise swallow them.
+// Other applications are unaffected, and the same combination keeps working in
+// them exactly as their own bindings define.
 bool MainWindow::RegisterHotkeys() {
-    UnregisterHotKey(hwnd_, kHotkeyId);
-    UnregisterHotKey(hwnd_, kProbeHotkeyId);
+    if (keyboardHook_) return true;   // already installed
 
-    const Hotkey::Combo t = ToggleHotkey();
-    const BOOL ok = RegisterHotKey(hwnd_, kHotkeyId, t.mods | MOD_NOREPEAT, t.vk);
+    s_hookOwner = this;
+    keyboardHook_ = SetWindowsHookExW(WH_KEYBOARD, &MainWindow::KeyboardHookProc,
+                                      nullptr, GetCurrentThreadId());
+    return keyboardHook_ != nullptr;
+}
 
-    // Diagnostics key is fixed and secondary; a clash there is not worth
-    // reporting.
-    const Hotkey::Combo d = Hotkey::DefaultDiagnostics();
-    RegisterHotKey(hwnd_, kProbeHotkeyId, d.mods | MOD_NOREPEAT, d.vk);
+// Thread-local hook: only sees input already destined for this process, so it
+// is not a keylogger and cannot observe other applications.
+MainWindow* MainWindow::s_hookOwner = nullptr;
 
-    return ok != FALSE;
+LRESULT CALLBACK MainWindow::KeyboardHookProc(int code, WPARAM wp, LPARAM lp) {
+    MainWindow* self = s_hookOwner;
+    if (code != HC_ACTION || !self)
+        return CallNextHookEx(nullptr, code, wp, lp);
+
+    // Bit 31 set means key-up; bit 30 means it was already down (auto-repeat).
+    const bool keyUp  = (lp & (1 << 31)) != 0;
+    const bool repeat = (lp & (1 << 30)) != 0;
+    if (keyUp || repeat)
+        return CallNextHookEx(nullptr, code, wp, lp);
+
+    const unsigned vk = static_cast<unsigned>(wp);
+
+    unsigned mods = 0;
+    if (GetKeyState(VK_CONTROL) & 0x8000) mods |= MOD_CONTROL;
+    if (GetKeyState(VK_SHIFT)   & 0x8000) mods |= MOD_SHIFT;
+    if (GetKeyState(VK_MENU)    & 0x8000) mods |= MOD_ALT;
+    if ((GetKeyState(VK_LWIN) | GetKeyState(VK_RWIN)) & 0x8000) mods |= MOD_WIN;
+
+    const Hotkey::Combo toggle = self->ToggleHotkey();
+    const Hotkey::Combo probe  = Hotkey::DefaultDiagnostics();
+
+    if (vk == toggle.vk && mods == toggle.mods) {
+        // Post rather than act inline: a hook proc must return promptly, and
+        // the toggle ends up pushing state through the WebView.
+        PostMessageW(self->hwnd_, WM_APP_TOGGLE_PRIVACY, 0, 0);
+        return 1;   // consume, so the page never sees the combination
+    }
+    if (vk == probe.vk && mods == probe.mods) {
+        PostMessageW(self->hwnd_, WM_APP_DUMP_DIAGNOSTICS, 0, 0);
+        return 1;
+    }
+
+    return CallNextHookEx(nullptr, code, wp, lp);
 }
 
 // True when the user has chosen dark mode for apps. The key is absent on older
@@ -200,6 +243,46 @@ struct PromptData {
 constexpr int kPromptEdit  = 200;
 constexpr int kPromptLabel = 201;
 
+// Subclass for the edit box: turns an actual keypress into the shortcut text,
+// so the user presses the combination rather than spelling it out.
+//
+// A combination another application has registered globally never reaches this
+// dialog and so cannot be captured here.
+WNDPROC g_prevEditProc = nullptr;
+
+LRESULT CALLBACK CaptureEditProc(HWND edit, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) {
+        const unsigned vk = static_cast<unsigned>(wp);
+
+        // Let the dialog handle these rather than capturing them.
+        if (vk == VK_TAB || vk == VK_RETURN || vk == VK_ESCAPE)
+            return CallWindowProcW(g_prevEditProc, edit, msg, wp, lp);
+
+        // A modifier on its own is not a shortcut; wait for the real key.
+        if (vk == VK_SHIFT || vk == VK_CONTROL || vk == VK_MENU ||
+            vk == VK_LWIN  || vk == VK_RWIN)
+            return 0;
+
+        Hotkey::Combo c;
+        if (GetKeyState(VK_CONTROL) & 0x8000) c.mods |= MOD_CONTROL;
+        if (GetKeyState(VK_SHIFT)   & 0x8000) c.mods |= MOD_SHIFT;
+        if (GetKeyState(VK_MENU)    & 0x8000) c.mods |= MOD_ALT;
+        if ((GetKeyState(VK_LWIN) | GetKeyState(VK_RWIN)) & 0x8000) c.mods |= MOD_WIN;
+        c.vk = vk;
+
+        // Show it either way: a modifier-less press is displayed so the user
+        // sees the dialog reacting, and validation rejects it on OK.
+        SetWindowTextW(edit, Hotkey::Format(c).c_str());
+        return 0;   // swallow, so the raw character is never inserted
+    }
+
+    // Block character insertion from captured keys; typing is handled by
+    // WM_KEYDOWN above only when it did not produce a valid combo.
+    if (msg == WM_CHAR || msg == WM_SYSCHAR) return 0;
+
+    return CallWindowProcW(g_prevEditProc, edit, msg, wp, lp);
+}
+
 INT_PTR CALLBACK PromptProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_INITDIALOG: {
@@ -207,9 +290,12 @@ INT_PTR CALLBACK PromptProc(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
         SetWindowLongPtrW(dlg, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(d));
         SetDlgItemTextW(dlg, kPromptLabel, d->body);
         SetDlgItemTextW(dlg, kPromptEdit, d->buffer);
-        // Select the existing text so typing replaces it.
-        SendDlgItemMessageW(dlg, kPromptEdit, EM_SETSEL, 0, -1);
-        SetFocus(GetDlgItem(dlg, kPromptEdit));
+        // Capture keypresses instead of accepting typed text.
+        HWND edit = GetDlgItem(dlg, kPromptEdit);
+        g_prevEditProc = reinterpret_cast<WNDPROC>(
+            SetWindowLongPtrW(edit, GWLP_WNDPROC,
+                              reinterpret_cast<LONG_PTR>(CaptureEditProc)));
+        SetFocus(edit);
         return FALSE;   // focus set explicitly
     }
     case WM_COMMAND:
@@ -261,7 +347,7 @@ bool MainWindow::PromptForText(const wchar_t* title, const wchar_t* body,
     header.style = DS_MODALFRAME | DS_CENTER | DS_SETFONT | WS_POPUP |
                    WS_CAPTION | WS_SYSMENU;
     header.cdit = 5;
-    header.cx = 280; header.cy = 130;
+    header.cx = 290; header.cy = 176;
     const auto* h = reinterpret_cast<const BYTE*>(&header);
     tmpl.insert(tmpl.end(), h, h + sizeof(header));
 
@@ -279,12 +365,14 @@ bool MainWindow::PromptForText(const wchar_t* title, const wchar_t* body,
     tmpl.insert(tmpl.end(), fp, fp + sizeof(face));
 
     constexpr WORD kStatic = 0x0082, kEdit = 0x0081, kButton = 0x0080;
-    AddControl(tmpl, SS_LEFT,                   10,  8, 260, 62, kPromptLabel, kStatic, L"");
-    AddControl(tmpl, WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL,
-                                                10, 76, 260, 14, kPromptEdit,  kEdit,   L"");
-    AddControl(tmpl, BS_DEFPUSHBUTTON | WS_TABSTOP, 150, 102, 55, 16, IDOK,     kButton, L"OK");
-    AddControl(tmpl, BS_PUSHBUTTON | WS_TABSTOP,    212, 102, 55, 16, IDCANCEL, kButton, L"Cancel");
-    AddControl(tmpl, SS_LEFT,                        10, 104,  0,  0, 202,      kStatic, L"");
+    AddControl(tmpl, SS_LEFT,                   10,  10, 270, 104, kPromptLabel, kStatic, L"");
+    // Centred and bold-ish by being the sole focus; ES_READONLY would grey it,
+    // so it stays editable-looking but the subclass swallows typed characters.
+    AddControl(tmpl, WS_BORDER | WS_TABSTOP | ES_CENTER,
+                                                10, 120, 270, 16, kPromptEdit,  kEdit,   L"");
+    AddControl(tmpl, BS_DEFPUSHBUTTON | WS_TABSTOP, 160, 146, 58, 16, IDOK,     kButton, L"OK");
+    AddControl(tmpl, BS_PUSHBUTTON | WS_TABSTOP,    222, 146, 58, 16, IDCANCEL, kButton, L"Cancel");
+    AddControl(tmpl, SS_LEFT,                        10, 168,  0,  0, 202,      kStatic, L"");
 
     PromptData data{ body, buffer, capacity };
     const INT_PTR r = DialogBoxIndirectParamW(
@@ -307,46 +395,36 @@ void MainWindow::ChangeHotkey() {
     wchar_t buffer[128]{};
     lstrcpynW(buffer, Hotkey::Format(current).c_str(), 128);
 
-    if (!PromptForText(L"Change shortcut",
-            L"Type a shortcut for toggling Privacy Mode.\n\n"
-            L"Examples:  Shift+Alt+W    Ctrl+Alt+P    Shift+Alt+F9\n\n"
-            L"It is claimed system-wide, so avoid combinations other apps use "
-            L"(Ctrl+Shift+P is VS Code's command palette, for instance).",
-            buffer, 128))
+    const std::wstring prompt =
+        L"Click the box below, then press the keys you want.\n\n"
+        L"Hold one or more of Ctrl, Shift, Alt or Win and press a letter, "
+        L"number or function key. For example, hold Shift and Alt, then press W.\n\n"
+        L"Current shortcut:  " + Hotkey::Format(current) + L"\n\n"
+        L"It works only while this window is focused, so it will not interfere "
+        L"with other applications. Press OK to save, Esc to cancel.";
+
+    if (!PromptForText(L"Change shortcut", prompt.c_str(), buffer, 128))
         return;   // cancelled
 
     const Hotkey::Combo next = Hotkey::Parse(buffer);
     if (!next.valid()) {
         MessageBoxW(hwnd_,
-            L"That does not look like a shortcut.\n\n"
-            L"Use at least one modifier (Ctrl, Shift, Alt or Win) plus a key, "
-            L"for example Shift+Alt+W.",
+            L"That is not a usable shortcut.\n\n"
+            L"Hold at least one modifier (Ctrl, Shift, Alt or Win) and press a "
+            L"key -- for example Shift+Alt+W. Without a modifier the key would "
+            L"be captured from every application.",
             L"PrivacyGlass", MB_OK | MB_ICONWARNING);
         return;
     }
 
-    const Hotkey::Combo previous = current;
     auto s = privacy_.Get();
     s.hotkeyMods = next.mods;
     s.hotkeyVk   = next.vk;
     privacy_.Set(s);            // persists via the settings sink
 
-    if (!RegisterHotkeys()) {
-        // Another application already owns it; roll back rather than leave the
-        // user with a shortcut that silently does nothing.
-        auto revert = privacy_.Get();
-        revert.hotkeyMods = previous.mods;
-        revert.hotkeyVk   = previous.vk;
-        privacy_.Set(revert);
-        RegisterHotkeys();
-
-        MessageBoxW(hwnd_,
-            (L"Another application is already using " + Hotkey::Format(next) +
-             L".\n\nThe shortcut has been left as " + Hotkey::Format(previous) +
-             L".").c_str(),
-            L"PrivacyGlass", MB_OK | MB_ICONWARNING);
-        return;
-    }
+    // No re-registration needed: the hook reads the current combination on each
+    // keypress, and nothing is reserved system-wide, so there is no clash to
+    // detect or roll back.
 
     // Rebuild the menu so the Privacy Mode row shows the new shortcut.
     RebuildSystemMenu();
@@ -400,8 +478,10 @@ void MainWindow::CheckForUpdates() {
 void MainWindow::ShowAbout() {
     const std::wstring version = L"Version " + AppVersion();
     const std::wstring body =
-        L"Blurs names, messages, photos and previews in WhatsApp Web.\n\n"
-        L"Ctrl+Shift+P toggles privacy instantly, from anywhere in the window.\n"
+        L"Blurs names, messages, photos and previews in WhatsApp Web.\n\n" +
+        // Live shortcut, not a hardcoded one -- it is user-configurable.
+        Hotkey::Format(ToggleHotkey()) +
+        L" toggles privacy instantly, from anywhere in the window.\n"
         L"Right-click the title bar (or press Alt+Space) for per-category options.\n"
         L"Hover over anything blurred to peek at it.\n\n"
         L"Everything runs locally: no server, no accounts, and chat content is "
@@ -575,8 +655,9 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
             SetTimer(hwnd_, kSelfCheckTimeoutId, 30000, nullptr);
         }
         webview_->Initialize();
-        // Global toggle; works regardless of which control has focus, including
-        // when the WebView2 child window owns it.
+        // Keyboard hook, not a global hotkey: works wherever focus sits inside
+        // this window (including the WebView2 child) without taking the
+        // combination away from other applications.
         RegisterHotkeys();
         return 0;
 
@@ -602,13 +683,13 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
         SyncSystemMenu();   // refresh check marks before the menu is shown
         break;              // must still reach DefWindowProc
 
-    case WM_HOTKEY:
-        if (wp == kHotkeyId) {
-            privacy_.Toggle();   // sink pushes it to the page
-            SyncSystemMenu();    // hotkey and menu share one source of truth
-        } else if (wp == kProbeHotkeyId && webview_) {
-            webview_->DumpDiagnostics();
-        }
+    case WM_APP_TOGGLE_PRIVACY:
+        privacy_.Toggle();   // sink pushes it to the page
+        SyncSystemMenu();    // shortcut and menu share one source of truth
+        return 0;
+
+    case WM_APP_DUMP_DIAGNOSTICS:
+        if (webview_) webview_->DumpDiagnostics();
         return 0;
 
     case WM_TIMER:
@@ -630,7 +711,11 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
 
     case WM_DESTROY:
-        UnregisterHotKey(hwnd_, kHotkeyId);
+        if (keyboardHook_) {
+            UnhookWindowsHookEx(keyboardHook_);
+            keyboardHook_ = nullptr;
+            s_hookOwner = nullptr;
+        }
         webview_.reset();   // release WebView2 before the loop exits
         PostQuitMessage(0);
         return 0;

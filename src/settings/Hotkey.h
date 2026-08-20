@@ -2,11 +2,12 @@
 #include <windows.h>
 #include <string>
 
-// Global hotkey handling: defaults, display text, and parsing user input.
+// Shortcut handling: defaults, display text, and parsing user input.
 //
-// RegisterHotKey takes a combination away from EVERY other application, so the
-// defaults here avoid anything commonly bound elsewhere. Shift+Alt+W rather
-// than Ctrl+Shift+P, which is VS Code's command palette.
+// The combination is matched by a keyboard hook while this app is focused, not
+// reserved with RegisterHotKey, so it never takes the keys away from other
+// applications. The defaults still avoid widely-used combinations so the
+// shortcut does not shadow something inside the WhatsApp page itself.
 namespace Hotkey {
 
 struct Combo {

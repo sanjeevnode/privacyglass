@@ -47,12 +47,31 @@ categories work independently.*
 works even when focus is inside the web view, so you can hide the screen without
 reaching for the menu.
 
-The shortcut is claimed **system-wide**, which is what lets it work from any
-window — but it also means no other app can use that combination while
-PrivacyGlass is running. If it clashes with something you use, change it via
-**Change shortcut...** (type e.g. `Ctrl+Alt+P` or `Shift+Alt+F9`). If the
-combination you pick is already taken by another app, PrivacyGlass says so and
-keeps the previous one rather than leaving you with a dead key.
+### Changing the shortcut
+
+The shortcut works **only while the PrivacyGlass window is focused**. It is not
+reserved system-wide, so every other application keeps its own bindings — if you
+pick a combination your editor or browser also uses, that app continues to
+handle it normally when it has focus.
+
+To change it:
+
+1. Right-click the title bar (or press **Alt+Space**) and choose
+   **Change shortcut...**
+2. Click the box, then **press the keys you want** — for example hold
+   <kbd>Shift</kbd> and <kbd>Alt</kbd>, then press <kbd>W</kbd>. The box fills
+   in as you press.
+3. Press **OK**.
+
+Rules worth knowing:
+
+- **At least one modifier is required** (<kbd>Ctrl</kbd>, <kbd>Shift</kbd>,
+  <kbd>Alt</kbd> or <kbd>Win</kbd>), so the key still works normally on its own.
+- Letters, numbers and function keys all work — `Shift+Alt+F9` is fine.
+- Clashing with another application is harmless: the shortcut only acts while
+  PrivacyGlass is focused, and that app keeps the combination when it is.
+
+The choice is saved and restored on next launch.
 
 Privacy is **ON every launch**. It is applied before WhatsApp finishes rendering,
 so chats are never briefly visible at startup. The four categories are independent

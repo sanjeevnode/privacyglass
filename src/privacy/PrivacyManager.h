@@ -14,10 +14,8 @@ public:
         bool previews    = true;
         bool hoverReveal = true;   // hover to peek without toggling privacy off
 
-        // Global hotkey for the master toggle. Registered system-wide, so the
-        // default deliberately avoids combinations other apps rely on --
-        // Ctrl+Shift+P was taken from VS Code's command palette, for instance.
-        // mods is a MOD_* bitmask; key is a virtual-key code.
+        // Shortcut for the master toggle, active only while this app is
+        // focused. mods is a MOD_* bitmask; key is a virtual-key code.
         unsigned hotkeyMods = 0;   // 0 => use the default
         unsigned hotkeyVk   = 0;
     };
