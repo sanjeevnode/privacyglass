@@ -38,7 +38,9 @@ HICON MakeBadgeIcon(int count) {
     memset(bigBits, 0, static_cast<size_t>(big) * big * 4);
 
     // Font first: the pill has to be wide enough for the text it will hold.
-    const int fontH = static_cast<int>(big * 0.62);
+    // The shell renders overlay icons at 16x16, so this 32px art is halved on
+    // screen. The glyph has to be a large fraction of the badge to survive that.
+    const int fontH = static_cast<int>(big * 0.78);
     HFONT font = CreateFontW(fontH, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                              DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                              ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
@@ -48,15 +50,22 @@ HICON MakeBadgeIcon(int count) {
     SIZE ext{};
     GetTextExtentPoint32W(bigDc, text.c_str(), static_cast<int>(text.size()), &ext);
 
-    // Height is fixed; width grows with the text, never narrower than a circle.
-    const int h = big;
-    int w = ext.cx + static_cast<int>(big * 0.45);   // padding either side
-    if (w < h) w = h;                                // one digit stays circular
-    if (w > big) w = big;                            // never exceed the canvas
+    // The badge is drawn slightly inset so its antialiased edge is not clipped,
+    // but otherwise fills the canvas -- at 16x16 on screen there is no room to
+    // waste on padding.
+    const int inset = big / 32;
+    const int h = big - inset * 2;
 
-    // Centre horizontally when the pill is narrower than the canvas.
-    const int left = (big - w) / 2;
+    // Width grows with the text. Tight padding, because every pixel spent on
+    // padding is a pixel not spent on the digits.
+    int w = ext.cx + static_cast<int>(h * 0.34);
+    if (w < h) w = h;                                // one digit stays circular
+    if (w > big - inset * 2) w = big - inset * 2;    // fits the canvas
+
+    // Centre horizontally; the shell places the whole icon bottom-right itself.
+    const int left  = (big - w) / 2;
     const int right = left + w;
+    const int top   = inset;
 
     HBRUSH fill = CreateSolidBrush(RGB(0xE8, 0x11, 0x23));   // notification red
     HGDIOBJ oldBrush = SelectObject(bigDc, fill);
@@ -64,7 +73,7 @@ HICON MakeBadgeIcon(int count) {
 
     // RoundRect with a full-height radius gives a circle at w == h and a pill
     // when wider, so one call covers both cases.
-    RoundRect(bigDc, left, 0, right + 1, h + 1, h, h);
+    RoundRect(bigDc, left, top, right + 1, top + h + 1, h, h);
 
     SelectObject(bigDc, oldBrush);
     SelectObject(bigDc, oldPen);
@@ -72,7 +81,7 @@ HICON MakeBadgeIcon(int count) {
 
     SetBkMode(bigDc, TRANSPARENT);
     SetTextColor(bigDc, RGB(255, 255, 255));
-    RECT tr{ left, 0, right, h };
+    RECT tr{ left, top, right, top + h };
     DrawTextW(bigDc, text.c_str(), -1, &tr,
               DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
 
