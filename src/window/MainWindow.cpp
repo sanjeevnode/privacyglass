@@ -5,6 +5,7 @@
 #include "AppIdentity.h"
 
 #include <windowsx.h>    // GET_X_LPARAM / GET_Y_LPARAM
+#include <dwmapi.h>      // DwmSetWindowAttribute (dark title bar)
 #include <commctrl.h>    // TaskDialogIndirect
 #include <shellapi.h>    // ShellExecuteW
 #include <vector>
@@ -90,6 +91,32 @@ void MainWindow::SyncSystemMenu() {
 
 void MainWindow::LayoutChildren() {
     if (webview_) webview_->Resize();
+}
+
+// True when the user has chosen dark mode for apps. The key is absent on older
+// builds, where light is the correct assumption.
+static bool SystemUsesDarkMode() {
+    DWORD value = 1;          // 1 = light
+    DWORD size  = sizeof(value);
+    if (RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                     L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr,
+                     &value, &size) != ERROR_SUCCESS)
+        return false;
+    return value == 0;
+}
+
+// Paints the title bar to match the system theme. Windows does not do this
+// automatically for Win32 apps -- without it the caption stays light even in
+// dark mode, which looks wrong against WhatsApp's dark UI.
+void MainWindow::ApplyTitleBarTheme() {
+    const BOOL dark = SystemUsesDarkMode() ? TRUE : FALSE;
+
+    // 20 is DWMWA_USE_IMMERSIVE_DARK_MODE on Windows 10 2004+ and Windows 11.
+    // Build 18985 and earlier used 19. Trying 20 first and falling back costs
+    // nothing and covers both.
+    if (FAILED(DwmSetWindowAttribute(hwnd_, 20, &dark, sizeof(dark))))
+        DwmSetWindowAttribute(hwnd_, 19, &dark, sizeof(dark));
 }
 
 // Reads FileVersion out of our own version resource, so the dialog always shows
@@ -281,6 +308,17 @@ bool MainWindow::Create() {
         CW_USEDEFAULT, CW_USEDEFAULT, 1100, 800,
         nullptr, nullptr, wc.hInstance, this);
 
+    if (hwnd_) {
+        // Applied here rather than only in WM_CREATE: DWM ignores the attribute
+        // while the window is still being created, so setting it there alone
+        // leaves the caption light.
+        ApplyTitleBarTheme();
+        // The caption is painted during creation, so force a non-client repaint
+        // for the new colour to take effect immediately.
+        SetWindowPos(hwnd_, nullptr, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+    }
+
     return hwnd_ != nullptr;
 }
 
@@ -303,6 +341,7 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
 LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_CREATE:
+        ApplyTitleBarTheme();
         // Restore saved preferences before the WebView exists, so the very first
         // state pushed to the page is the user's, not the defaults.
         // Skipped under --selfcheck: a test run must not read or write the real
@@ -373,6 +412,13 @@ LRESULT MainWindow::HandleMessage(UINT msg, WPARAM wp, LPARAM lp) {
             ReportSelfCheck(L"{\"type\":\"selfcheck\",\"passed\":0,\"total\":0,"
                             L"\"lines\":\"[FAIL] TIMEOUT - messages seen:\"}");
         }
+        return 0;
+
+    case WM_SETTINGCHANGE:
+        // Broadcast when the user flips the light/dark setting; lParam names
+        // the changed area. Re-apply so the caption follows without a restart.
+        if (lp && !lstrcmpiW(reinterpret_cast<LPCWSTR>(lp), L"ImmersiveColorSet"))
+            ApplyTitleBarTheme();
         return 0;
 
     case WM_SIZE:

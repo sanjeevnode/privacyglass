@@ -64,7 +64,7 @@ target_include_directories(PrivacyGlass PRIVATE
 # Static loader => single self-contained exe, no WebView2Loader.dll to ship.
 target_link_libraries(PrivacyGlass PRIVATE
   ${webview2_SOURCE_DIR}/build/native/x64/WebView2LoaderStatic.lib
-  version shlwapi comctl32 winhttp)
+  version shlwapi comctl32 winhttp dwmapi)
 
 target_compile_definitions(PrivacyGlass PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
 

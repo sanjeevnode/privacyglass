@@ -23,6 +23,7 @@ private:
     void    ReportSelfCheck(const std::wstring& json);
     void    CreateToolbar();        // appends privacy items to the window menu
     void    SyncSystemMenu();       // refresh those items' check marks
+    void    ApplyTitleBarTheme();   // match the system light/dark setting
     void    ShowAbout();
     void    CheckForUpdates();
     void    LayoutChildren();
